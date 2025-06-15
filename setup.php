@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         
-        // テーブル作成
+        // カテゴリテーブル
         $db->exec("
             CREATE TABLE IF NOT EXISTS categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )
         ");
         
+        // サイト情報テーブル（ユーザー編集機能対応版）
         $db->exec("
             CREATE TABLE IF NOT EXISTS sites (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,6 +59,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 url TEXT NOT NULL UNIQUE,
                 description TEXT,
                 category_id INTEGER NOT NULL,
+                email TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
                 status TEXT DEFAULT 'pending',
                 ip_address TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -66,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )
         ");
         
+        // 管理者テーブル
         $db->exec("
             CREATE TABLE IF NOT EXISTS admins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,6 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )
         ");
         
+        // 設定テーブル
         $db->exec("
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -88,6 +93,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db->exec("CREATE INDEX IF NOT EXISTS idx_sites_category ON sites(category_id)");
         $db->exec("CREATE INDEX IF NOT EXISTS idx_sites_status ON sites(status)");
         $db->exec("CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id)");
+        $db->exec("CREATE INDEX IF NOT EXISTS idx_sites_email ON sites(email)");
+        
+        // 既存のsitesテーブルにカラムが不足している場合の対応
+        $columns = $db->query("PRAGMA table_info(sites)")->fetchAll();
+        $has_email = false;
+        $has_password_hash = false;
+        
+        foreach ($columns as $column) {
+            if ($column['name'] === 'email') $has_email = true;
+            if ($column['name'] === 'password_hash') $has_password_hash = true;
+        }
+        
+        if (!$has_email) {
+            $db->exec("ALTER TABLE sites ADD COLUMN email TEXT");
+            $db->exec("CREATE INDEX IF NOT EXISTS idx_sites_email ON sites(email)");
+        }
+        if (!$has_password_hash) {
+            $db->exec("ALTER TABLE sites ADD COLUMN password_hash TEXT");
+        }
         
         // 初期データ挿入
         // 管理者アカウントの確認
@@ -184,144 +208,13 @@ $requirements = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ディレクトリサーチ - 初期セットアップ</title>
-    <style>
-        body {
-            font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            line-height: 1.6;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #eee;
-        }
-        .header h1 {
-            color: #333;
-            margin: 0 0 10px 0;
-        }
-        .header p {
-            color: #666;
-            margin: 0;
-        }
-        .requirements {
-            margin-bottom: 30px;
-        }
-        .requirements h2 {
-            color: #333;
-            margin-bottom: 20px;
-        }
-        .requirement-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-        }
-        .requirement-item:last-child {
-            border-bottom: none;
-        }
-        .requirement-name {
-            font-weight: bold;
-            flex: 1;
-        }
-        .requirement-value {
-            margin: 0 20px;
-            font-family: monospace;
-        }
-        .requirement-status {
-            padding: 4px 12px;
-            border-radius: 20px;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        .status-ok {
-            background: #28a745;
-        }
-        .status-error {
-            background: #dc3545;
-        }
-        .setup-button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px 30px;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            width: 100%;
-            margin-top: 20px;
-        }
-        .setup-button:hover {
-            transform: translateY(-2px);
-        }
-        .setup-button:disabled {
-            background: #6c757d;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .message {
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 6px;
-            font-weight: bold;
-        }
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .info-box {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #007cba;
-            margin-bottom: 30px;
-        }
-        .info-box h3 {
-            margin-top: 0;
-            color: #333;
-        }
-        .file-structure {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 6px;
-            font-family: monospace;
-            font-size: 14px;
-            white-space: pre-line;
-            overflow-x: auto;
-        }
-        .next-steps {
-            background: #d1ecf1;
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #007cba;
-            margin-top: 30px;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="page-setup">
     <div class="container">
         <div class="header">
             <h1>ディレクトリサーチ</h1>
+            <p>初期セットアップ</p>
         </div>
 
         <?php if ($message): ?>
@@ -402,7 +295,11 @@ $requirements = [
             <div class="file-structure">/your-search-engine/
 ├── index.php              # メインページ
 ├── register.php           # サイト登録ページ
+├── user_login.php         # ユーザーログイン
+├── user_dashboard.php     # ユーザーダッシュボード
+├── user_edit.php          # サイト情報編集
 ├── setup.php              # このファイル（セットアップ後削除）
+├── style.css              # 統合スタイルシート
 ├── .htaccess              # Apache設定（検索避け）
 ├── robots.txt             # 検索避け設定
 ├── admin/

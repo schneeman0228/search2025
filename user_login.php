@@ -1,9 +1,9 @@
 <?php
-require_once '../includes/config.php';
+require_once 'includes/config.php';
 
 // 既にログイン済みの場合はダッシュボードへリダイレクト
-if (isAdminLoggedIn()) {
-    header('Location: dashboard.php');
+if (isUserLoggedIn()) {
+    header('Location: user_dashboard.php');
     exit;
 }
 
@@ -11,19 +11,19 @@ $error = '';
 
 // ログイン処理
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
+    $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $csrf_token = $_POST['csrf_token'] ?? '';
     
     if (!verifyCsrfToken($csrf_token)) {
         $error = '無効なリクエストです。';
-    } elseif (empty($username) || empty($password)) {
-        $error = 'ユーザー名とパスワードを入力してください。';
-    } elseif (authenticateAdmin($username, $password)) {
-        header('Location: dashboard.php');
+    } elseif (empty($email) || empty($password)) {
+        $error = 'メールアドレスとパスワードを入力してください。';
+    } elseif (authenticateUser($email, $password)) {
+        header('Location: user_dashboard.php');
         exit;
     } else {
-        $error = 'ユーザー名またはパスワードが正しくありません。';
+        $error = 'メールアドレスまたはパスワードが正しくありません。';
     }
 }
 ?>
@@ -33,21 +33,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="<?php echo $ROBOTS_CONTENT; ?>">
-    <title>管理画面ログイン - <?php echo h($SITE_TITLE); ?></title>
-    <link rel="stylesheet" href="../style.css">
+    <title>サイト情報編集 - ログイン - <?php echo h($SITE_TITLE); ?></title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body class="page-login">
     <div class="login-container">
         <div class="login-header">
-            <h1>管理画面</h1>
+            <h1>サイト情報編集</h1>
             <p><?php echo h($SITE_TITLE); ?></p>
         </div>
 
         <div class="info-box">
-            <strong>デフォルトログイン情報:</strong>
-            ユーザー名: admin<br>
-            パスワード: admin123<br>
-            <small>※初回ログイン後、必ずパスワードを変更してください</small>
+            <strong>ログインについて</strong>
+            サイト登録時に設定したメールアドレスとパスワードでログインしてください。
+            ログイン後、サイト情報の編集が可能になります（承認不要）。
         </div>
 
         <?php if ($error): ?>
@@ -58,8 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
 
             <div class="form-group">
-                <label for="username">ユーザー名</label>
-                <input type="text" id="username" name="username" value="<?php echo h($username ?? ''); ?>" required autocomplete="username">
+                <label for="email">メールアドレス</label>
+                <input type="email" id="email" name="email" value="<?php echo h($email ?? ''); ?>" required autocomplete="email">
             </div>
 
             <div class="form-group">
@@ -71,7 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
 
         <div class="links">
-            <a href="../">&laquo; サイトトップに戻る</a>
+            <a href=".">&laquo; サイトトップに戻る</a>
+            <a href="register.php">新規サイト登録</a>
         </div>
     </div>
 </body>

@@ -15,6 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $url = trim($_POST['url'] ?? '');
         $description = trim($_POST['description'] ?? '');
         $category_id = (int)($_POST['category_id'] ?? 0);
+        $email = trim($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $password_confirm = $_POST['password_confirm'] ?? '';
         $ip_address = $_SERVER['REMOTE_ADDR'];
         
         // バリデーション
@@ -26,6 +29,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = '有効なURLを入力してください。';
         } elseif ($category_id <= 0) {
             $error = 'カテゴリを選択してください。';
+        } elseif (empty($email)) {
+            $error = 'メールアドレスを入力してください。';
+        } elseif (!isValidEmail($email)) {
+            $error = '有効なメールアドレスを入力してください。';
+        } elseif (empty($password)) {
+            $error = 'パスワードを入力してください。';
+        } elseif (strlen($password) < 6) {
+            $error = 'パスワードは6文字以上で入力してください。';
+        } elseif ($password !== $password_confirm) {
+            $error = 'パスワードが一致しません。';
         } elseif (strlen($title) > 100) {
             $error = 'サイト名は100文字以内で入力してください。';
         } elseif (strlen($description) > 500) {
@@ -33,16 +46,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!checkIpLimit($ip_address)) {
             $error = '短時間での登録回数が上限に達しています。しばらく時間をおいてから再度お試しください。';
         } else {
-            // サイト登録実行
-            $result = registerSite($title, $url, $description, $category_id, $ip_address);
+            // URL重複チェック
+            $stmt = $db->prepare("SELECT COUNT(*) as count FROM sites WHERE url = ?");
+            $stmt->execute([$url]);
+            $result = $stmt->fetch();
             
-            if ($result['success']) {
-                $message = $result['message'];
-                // フォームクリア
-                $title = $url = $description = '';
-                $category_id = 0;
+            if ($result['count'] > 0) {
+                $error = 'このURLは既に登録されています。';
             } else {
-                $error = $result['message'];
+                // メール重複チェック
+                $stmt = $db->prepare("SELECT COUNT(*) as count FROM sites WHERE email = ?");
+                $stmt->execute([$email]);
+                $result = $stmt->fetch();
+                
+                if ($result['count'] > 0) {
+                    $error = 'このメールアドレスは既に使用されています。';
+                } else {
+                    // サイト数上限チェック
+                    $totalSites = getSiteCount('approved') + getSiteCount('pending');
+                    if ($totalSites >= $MAX_SITES) {
+                        $error = 'サイト登録数が上限に達しています。';
+                    } else {
+                        // サイト登録実行
+                        try {
+                            $password_hash = password_hash($password, PASSWORD_DEFAULT);
+                            $stmt = $db->prepare("
+                                INSERT INTO sites (title, url, description, category_id, email, password_hash, ip_address, status) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+                            ");
+                            $stmt->execute([$title, $url, $description, $category_id, $email, $password_hash, $ip_address]);
+                            
+                            $message = 'サイトを登録しました。管理者の承認をお待ちください。承認後、このメールアドレスとパスワードでログインして情報を編集できます。';
+                            // フォームクリア
+                            $title = $url = $description = $email = '';
+                            $category_id = 0;
+                        } catch (PDOException $e) {
+                            $error = 'データベースエラーが発生しました。';
+                        }
+                    }
+                }
             }
         }
     }
@@ -58,127 +100,13 @@ $categories = getCategories();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="<?php echo $ROBOTS_CONTENT; ?>">
     <title>サイト登録 - <?php echo h($SITE_TITLE); ?></title>
-    <style>
-        body {
-            font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-            line-height: 1.6;
-        }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #eee;
-        }
-        .header h1 {
-            color: #333;
-            margin: 0 0 10px 0;
-        }
-        .back-link {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .back-link a {
-            color: #007cba;
-            text-decoration: none;
-        }
-        .back-link a:hover {
-            text-decoration: underline;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #333;
-        }
-        .form-group .required {
-            color: #dc3545;
-        }
-        .form-group input[type="text"],
-        .form-group input[type="url"],
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-            box-sizing: border-box;
-        }
-        .form-group textarea {
-            height: 80px;
-            resize: vertical;
-        }
-        .form-group .help-text {
-            font-size: 0.9em;
-            color: #666;
-            margin-top: 5px;
-        }
-        .submit-button {
-            background: #007cba;
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
-            cursor: pointer;
-            width: 100%;
-        }
-        .submit-button:hover {
-            background: #005a87;
-        }
-        .message {
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 4px;
-            font-weight: bold;
-        }
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .guidelines {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            border-left: 4px solid #007cba;
-        }
-        .guidelines h3 {
-            margin-top: 0;
-            color: #333;
-        }
-        .guidelines ul {
-            margin-bottom: 0;
-        }
-        .guidelines li {
-            margin-bottom: 5px;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="page-register">
     <div class="container">
         <div class="back-link">
             <a href=".">&laquo; トップページに戻る</a>
+            <a href="user_login.php">既に登録済みの方はこちら</a>
         </div>
 
         <div class="header">
@@ -193,12 +121,18 @@ $categories = getCategories();
             <div class="message error"><?php echo h($error); ?></div>
         <?php endif; ?>
 
+        <div class="security-note">
+            <h4>🔒 ログイン情報について</h4>
+            <p>登録時に設定するメールアドレスとパスワードは、後でサイト情報を編集する際に必要になります。安全なパスワードを設定し、忘れないようにしてください。</p>
+        </div>
+
         <div class="guidelines">
             <h3>登録について</h3>
             <ul>
                 <li>登録されたサイトは管理者の承認後に掲載されます</li>
+                <li>承認後、登録したメールアドレスとパスワードでログインして情報を編集できます</li>
                 <li>不適切なサイトや規約に反するサイトは承認されない場合があります</li>
-                <li>同一のURLは重複して登録できません</li>
+                <li>同一のURLまたはメールアドレスは重複して登録できません</li>
                 <li>登録可能サイト数: <?php echo number_format($MAX_SITES); ?>サイト（現在: <?php echo number_format(getSiteCount('approved')); ?>サイト）</li>
             </ul>
         </div>
@@ -236,11 +170,50 @@ $categories = getCategories();
                 <div class="help-text">500文字以内で入力してください（任意）</div>
             </div>
 
+            <h3 style="margin-top: 30px; margin-bottom: 20px; color: #333;">編集用ログイン情報</h3>
+
+            <div class="form-group">
+                <label for="email">メールアドレス <span class="required">*</span></label>
+                <input type="email" id="email" name="email" value="<?php echo h($email ?? ''); ?>" required>
+                <div class="help-text">サイト情報編集時のログインに使用します</div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="password">パスワード <span class="required">*</span></label>
+                    <input type="password" id="password" name="password" minlength="6" required>
+                    <div class="help-text">6文字以上で入力してください</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password_confirm">パスワード確認 <span class="required">*</span></label>
+                    <input type="password" id="password_confirm" name="password_confirm" minlength="6" required>
+                    <div class="help-text">確認のため再度入力してください</div>
+                </div>
+            </div>
+
             <button type="submit" class="submit-button">サイトを登録する</button>
         </form>
     </div>
 
     <script>
+        // パスワード一致チェック
+        document.getElementById('password_confirm').addEventListener('input', function() {
+            const password = document.getElementById('password').value;
+            const confirm = this.value;
+            const helpText = this.nextElementSibling;
+            
+            if (confirm && password !== confirm) {
+                this.style.borderColor = '#dc3545';
+                helpText.style.color = '#dc3545';
+                helpText.textContent = 'パスワードが一致しません';
+            } else {
+                this.style.borderColor = '#ddd';
+                helpText.style.color = '#666';
+                helpText.textContent = '確認のため再度入力してください';
+            }
+        });
+
         // 文字数カウンター
         document.getElementById('title').addEventListener('input', function() {
             const maxLength = 100;
