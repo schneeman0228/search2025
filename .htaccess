@@ -1,0 +1,92 @@
+# ディレクトリサーチ用 .htaccess
+# 検索避け・セキュリティ設定
+
+# 検索避け設定
+<IfModule mod_headers.c>
+    # 検索エンジンに対してnoindexを指示
+    Header always set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+    
+    # セキュリティヘッダー
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# URL書き換え設定
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # HTTPSへのリダイレクト（必要に応じて有効化）
+    # RewriteCond %{HTTPS} off
+    # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+    
+    # ディレクトリリスティングの無効化
+    Options -Indexes
+    
+    # 管理ディレクトリへの直接アクセス制限
+    RewriteCond %{REQUEST_URI} ^/admin/?$
+    RewriteRule ^admin/?$ admin/login.php [L]
+</IfModule>
+
+# ファイルアクセス制限
+<FilesMatch "\.(db|sqlite|sqlite3)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "^(config|database|functions)\.php$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# includesディレクトリへの直接アクセス禁止
+<IfModule mod_rewrite.c>
+    RewriteRule ^includes/ - [F,L]
+    RewriteRule ^data/ - [F,L]
+</IfModule>
+
+# キャッシュ設定（静的ファイル）
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/jpg "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/svg+xml "access plus 1 month"
+</IfModule>
+
+# PHPセキュリティ設定
+<IfModule mod_php.c>
+    # セッションセキュリティ
+    php_value session.cookie_httponly 1
+    php_value session.cookie_secure 1
+    php_value session.use_strict_mode 1
+    
+    # アップロード制限
+    php_value upload_max_filesize "2M"
+    php_value post_max_size "2M"
+    
+    # エラー表示制限（本番環境用）
+    # php_flag display_errors Off
+    # php_flag log_errors On
+</IfModule>
+
+# 圧縮設定
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+</IfModule>
+
+# エラーページ設定
+ErrorDocument 403 /index.php
+ErrorDocument 404 /index.php

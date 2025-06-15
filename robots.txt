@@ -1,0 +1,41 @@
+# robots.txt for ディレクトリサーチ
+# 同人サイト向け検索避け設定
+
+# すべての検索エンジンのクローラーを拒否
+User-agent: *
+Disallow: /
+
+# 特定の検索エンジンを明示的に拒否
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Bingbot
+Disallow: /
+
+User-agent: Slurp
+Disallow: /
+
+User-agent: DuckDuckBot
+Disallow: /
+
+User-agent: Baiduspider
+Disallow: /
+
+User-agent: YandexBot
+Disallow: /
+
+User-agent: facebookexternalhit
+Disallow: /
+
+User-agent: Twitterbot
+Disallow: /
+
+# 管理ディレクトリとデータディレクトリは特に禁止
+User-agent: *
+Disallow: /admin/
+Disallow: /includes/
+Disallow: /data/
+Disallow: /setup.php
+
+# サイトマップは提供しない（検索避けのため）
+# Sitemap: https://yoursite.com/sitemap.xml
