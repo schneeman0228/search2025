@@ -124,23 +124,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->exec("INSERT INTO admins (username, password_hash, email) VALUES ('admin', '$defaultPassword', 'admin@example.com')");
         }
         
-        // 基本カテゴリの確認
+        // 階層カテゴリの確認と挿入
         $stmt = $db->query("SELECT COUNT(*) as count FROM categories");
         $result = $stmt->fetch();
         
         if ($result['count'] == 0) {
-            // 基本カテゴリ挿入
-            $categories = [
-                ['name' => '総合', 'description' => '総合カテゴリ'],
-                ['name' => 'エンターテイメント', 'description' => 'エンターテイメント関連'],
-                ['name' => '趣味・娯楽', 'description' => '趣味・娯楽関連'],
-                ['name' => '創作', 'description' => '創作活動関連'],
-                ['name' => 'その他', 'description' => 'その他のカテゴリ']
+            // 親カテゴリの定義
+            $parent_categories = [
+                [
+                    'name' => 'コンテンツ',
+                    'description' => 'コンテンツの種類',
+                    'sort_order' => 1,
+                    'children' => [
+                        ['name' => '漫画', 'description' => '漫画・コミック', 'sort_order' => 1],
+                        ['name' => '小説', 'description' => '小説・文章', 'sort_order' => 2],
+                        ['name' => 'イラスト', 'description' => 'イラスト・絵', 'sort_order' => 3]
+                    ]
+                ],
+                [
+                    'name' => '年齢制限',
+                    'description' => '年齢制限の有無',
+                    'sort_order' => 2,
+                    'children' => [
+                        ['name' => '全年齢', 'description' => '全年齢対象', 'sort_order' => 1],
+                        ['name' => '成人向け', 'description' => '18禁・成人向け', 'sort_order' => 2]
+                    ]
+                ],
+                [
+                    'name' => '作品名',
+                    'description' => '取り扱い作品・ジャンル',
+                    'sort_order' => 3,
+                    'children' => [
+                        ['name' => 'AAA', 'description' => 'AAAシリーズ', 'sort_order' => 1],
+                        ['name' => 'BBB', 'description' => 'BBBシリーズ', 'sort_order' => 2]
+                    ]
+                ],
+                [
+                    'name' => '備考',
+                    'description' => 'サイトの特徴・備考',
+                    'sort_order' => 4,
+                    'children' => [
+                        ['name' => '雑多', 'description' => '雑多・複数ジャンル', 'sort_order' => 4],
+                        ['name' => 'オフライン活動', 'description' => 'オフライン・イベント活動', 'sort_order' => 6],
+                        ['name' => 'URL請求制', 'description' => 'URL請求制', 'sort_order' => 14],
+                        ['name' => 'パスワード制', 'description' => 'パスワード制', 'sort_order' => 15],
+                        ['name' => '一部パスワード制', 'description' => '一部パスワード制', 'sort_order' => 16],
+                        ]
+                ]
             ];
             
-            foreach ($categories as $i => $category) {
-                $stmt = $db->prepare("INSERT INTO categories (name, description, sort_order) VALUES (?, ?, ?)");
-                $stmt->execute([$category['name'], $category['description'], $i]);
+            // 親カテゴリと子カテゴリを順次挿入
+            foreach ($parent_categories as $parent) {
+                // 親カテゴリを挿入
+                $stmt = $db->prepare("INSERT INTO categories (name, description, parent_id, sort_order) VALUES (?, ?, NULL, ?)");
+                $stmt->execute([$parent['name'], $parent['description'], $parent['sort_order']]);
+                $parent_id = $db->lastInsertId();
+                
+                // 子カテゴリを挿入
+                foreach ($parent['children'] as $child) {
+                    $stmt = $db->prepare("INSERT INTO categories (name, description, parent_id, sort_order) VALUES (?, ?, ?, ?)");
+                    $stmt->execute([$child['name'], $child['description'], $parent_id, $child['sort_order']]);
+                }
             }
         }
         
@@ -168,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $db->query("SELECT COUNT(*) as count FROM categories");
         $result = $stmt->fetch();
         
-        $message = 'データベースの初期化が完了しました！';
+        $message = 'データベースの初期化が完了しました！階層カテゴリ（' . $result['count'] . '件）が作成されました。';
         
         // セットアップ完了ファイル作成
         file_put_contents($setup_file, date('Y-m-d H:i:s'));
@@ -214,7 +258,7 @@ $requirements = [
     <div class="container">
         <div class="header">
             <h1>ディレクトリサーチ</h1>
-            <p>初期セットアップ</p>
+            <p>初期セットアップ（階層カテゴリ対応版）</p>
         </div>
 
         <?php if ($message): ?>
@@ -233,13 +277,32 @@ $requirements = [
 
         <?php if (!$message): ?>
             <div class="info-box">
-                <h3>セットアップについて</h3>
+                <h3>階層カテゴリセットアップについて</h3>
                 <p>このセットアップでは以下の処理を行います：</p>
                 <ul>
                     <li>SQLiteデータベースの作成</li>
-                    <li>必要なテーブルの作成</li>
-                    <li>初期データの投入（管理者アカウント、基本カテゴリ）</li>
+                    <li>必要なテーブルの作成（階層対応）</li>
+                    <li><strong>2層構造カテゴリの作成</strong>
+                        <ul>
+                            <li>コンテンツ（漫画、小説、イラスト）</li>
+                            <li>年齢制限（全年齢、成人向け）</li>
+                            <li>作品名（AAA、BBB）</li>
+                            <li>備考（30種類の詳細分類）</li>
+                        </ul>
+                    </li>
+                    <li>初期データの投入（管理者アカウント、基本設定）</li>
                     <li>基本設定の初期化</li>
+                </ul>
+            </div>
+
+            <div class="info-box">
+                <h4>🎨 同人サイト向け特別仕様</h4>
+                <p>今回のセットアップでは、同人サイト運営者のニーズに特化した階層カテゴリを構築します：</p>
+                <ul>
+                    <li><strong>コンテンツ分類</strong>: 創作形態による分類</li>
+                    <li><strong>年齢制限</strong>: 明確なレーティング分類</li>
+                    <li><strong>作品名</strong>: 取り扱いジャンル・作品分類</li>
+                    <li><strong>備考</strong>: サイトの特徴・技術仕様・更新頻度などの詳細分類</li>
                 </ul>
             </div>
 
@@ -268,7 +331,7 @@ $requirements = [
 
             <form method="POST" action="">
                 <button type="submit" class="setup-button" <?php echo $all_requirements_met ? '' : 'disabled'; ?>>
-                    <?php echo $all_requirements_met ? 'データベースを初期化する' : '要件を満たしていません'; ?>
+                    <?php echo $all_requirements_met ? '階層カテゴリで初期化する' : '要件を満たしていません'; ?>
                 </button>
             </form>
 
@@ -283,23 +346,32 @@ $requirements = [
                             <li>パスワード: <code>admin123</code></li>
                         </ul>
                     </li>
-                    <li>管理者パスワードを変更してください</li>
+                    <li><strong>管理者パスワードを変更してください</strong></li>
                     <li>サイトタイトルや説明文を設定してください</li>
+                    <li>作成されたカテゴリ構造を確認してください</li>
                     <li>必要に応じてカテゴリを追加・編集してください</li>
                 </ol>
+            </div>
+            
+            <div class="info-box">
+                <h4>📋 作成されたカテゴリ構造</h4>
+                <p><strong>コンテンツ</strong>: 漫画, 小説, イラスト</p>
+                <p><strong>年齢制限</strong>: 全年齢, 成人向け</p>
+                <p><strong>作品名</strong>: AAA, BBB</p>
+                <p><strong>備考</strong>: 交流壁打ち, 自己満足, 日記メイン, 雑多, 同人誌装丁, オフライン活動, ドット絵, アナログ絵, 講座・メイキング, 仕事募集中, サイト作成支援, 作品数50↑, 作品数100↑, URL請求制, パスワード制, 一部パスワード制, アクセス対策中, HTML/CSS, WordPress, forestpage+, Xfolio, Privatter+, モバイル用, てがろぐ, マイペース, 不定期更新, 期間限定, ポートフォリオ, 倉庫, 更新休止中</p>
             </div>
         <?php endif; ?>
 
         <div class="info-box">
             <h3>ファイル構成</h3>
             <div class="file-structure">/your-search-engine/
-├── index.php              # メインページ
-├── register.php           # サイト登録ページ
+├── index.php              # メインページ（階層表示対応）
+├── register.php           # サイト登録ページ（階層選択対応）
 ├── user_login.php         # ユーザーログイン
 ├── user_dashboard.php     # ユーザーダッシュボード
 ├── user_edit.php          # サイト情報編集
 ├── setup.php              # このファイル（セットアップ後削除）
-├── style.css              # 統合スタイルシート
+├── style.css              # 統合スタイルシート（階層表示CSS追加）
 ├── .htaccess              # Apache設定（検索避け）
 ├── robots.txt             # 検索避け設定
 ├── admin/
@@ -309,9 +381,9 @@ $requirements = [
 ├── includes/
 │   ├── config.php         # 設定ファイル
 │   ├── database.php       # データベース接続
-│   └── functions.php      # 共通関数
+│   └── functions.php      # 共通関数（階層関数追加）
 └── data/
-    ├── search.db          # SQLiteデータベース
+    ├── search.db          # SQLiteデータベース（階層構造）
     └── .setup_complete    # セットアップ完了フラグ</div>
         </div>
     </div>

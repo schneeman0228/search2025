@@ -66,8 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $password_error = '現在のパスワードを入力してください。';
         } elseif (empty($new_password)) {
             $password_error = '新しいパスワードを入力してください。';
-        } elseif (strlen($new_password) < 6) {
-            $password_error = '新しいパスワードは6文字以上で入力してください。';
+        } elseif (!isValidPassword($new_password)) {
+            $password_error = '新しいパスワードは半角英数字3〜8文字で入力してください。';
         } elseif ($new_password !== $new_password_confirm) {
             $password_error = '新しいパスワードが一致しません。';
         } else {
@@ -198,13 +198,13 @@ $categories = getCategories();
                     <div class="form-row">
                         <div class="form-group">
                             <label for="new_password">新しいパスワード <span class="required">*</span></label>
-                            <input type="password" id="new_password" name="new_password" minlength="6" required>
-                            <div class="help-text">6文字以上で入力してください</div>
+                            <input type="password" id="new_password" name="new_password" minlength="3" maxlength="8" required>
+                            <div class="help-text">半角英数字3〜8文字で入力してください</div>
                         </div>
 
                         <div class="form-group">
                             <label for="new_password_confirm">新しいパスワード確認 <span class="required">*</span></label>
-                            <input type="password" id="new_password_confirm" name="new_password_confirm" minlength="6" required>
+                            <input type="password" id="new_password_confirm" name="new_password_confirm" minlength="3" maxlength="8" required>
                             <div class="help-text">確認のため再度入力してください</div>
                         </div>
                     </div>

@@ -17,7 +17,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $category_id = (int)($_POST['category_id'] ?? 0);
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
-        $password_confirm = $_POST['password_confirm'] ?? '';
         $ip_address = $_SERVER['REMOTE_ADDR'];
         
         // バリデーション
@@ -35,10 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = '有効なメールアドレスを入力してください。';
         } elseif (empty($password)) {
             $error = 'パスワードを入力してください。';
-        } elseif (strlen($password) < 6) {
-            $error = 'パスワードは6文字以上で入力してください。';
-        } elseif ($password !== $password_confirm) {
-            $error = 'パスワードが一致しません。';
+        } elseif (!isValidPassword($password)) {
+            $error = 'パスワードは半角英数字3〜8文字で入力してください。';
         } elseif (strlen($title) > 100) {
             $error = 'サイト名は100文字以内で入力してください。';
         } elseif (strlen($description) > 500) {
@@ -54,35 +51,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($result['count'] > 0) {
                 $error = 'このURLは既に登録されています。';
             } else {
-                // メール重複チェック
-                $stmt = $db->prepare("SELECT COUNT(*) as count FROM sites WHERE email = ?");
-                $stmt->execute([$email]);
-                $result = $stmt->fetch();
-                
-                if ($result['count'] > 0) {
-                    $error = 'このメールアドレスは既に使用されています。';
+                // サイト数上限チェック
+                $totalSites = getSiteCount('approved') + getSiteCount('pending');
+                if ($totalSites >= $MAX_SITES) {
+                    $error = 'サイト登録数が上限に達しています。';
                 } else {
-                    // サイト数上限チェック
-                    $totalSites = getSiteCount('approved') + getSiteCount('pending');
-                    if ($totalSites >= $MAX_SITES) {
-                        $error = 'サイト登録数が上限に達しています。';
+                    // サイト登録実行
+                    $result = registerSiteWithUser($title, $url, $description, $category_id, $email, $password, $ip_address);
+                    
+                    if ($result['success']) {
+                        $message = $result['message'];
+                        // フォームクリア
+                        $title = $url = $description = $email = '';
+                        $category_id = 0;
                     } else {
-                        // サイト登録実行
-                        try {
-                            $password_hash = password_hash($password, PASSWORD_DEFAULT);
-                            $stmt = $db->prepare("
-                                INSERT INTO sites (title, url, description, category_id, email, password_hash, ip_address, status) 
-                                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
-                            ");
-                            $stmt->execute([$title, $url, $description, $category_id, $email, $password_hash, $ip_address]);
-                            
-                            $message = 'サイトを登録しました。管理者の承認をお待ちください。承認後、このメールアドレスとパスワードでログインして情報を編集できます。';
-                            // フォームクリア
-                            $title = $url = $description = $email = '';
-                            $category_id = 0;
-                        } catch (PDOException $e) {
-                            $error = 'データベースエラーが発生しました。';
-                        }
+                        $error = $result['message'];
                     }
                 }
             }
@@ -132,7 +115,7 @@ $categories = getCategories();
                 <li>登録されたサイトは管理者の承認後に掲載されます</li>
                 <li>承認後、登録したメールアドレスとパスワードでログインして情報を編集できます</li>
                 <li>不適切なサイトや規約に反するサイトは承認されない場合があります</li>
-                <li>同一のURLまたはメールアドレスは重複して登録できません</li>
+                <li>同一のURLは重複して登録できません（メールアドレスは重複OK）</li>
                 <li>登録可能サイト数: <?php echo number_format($MAX_SITES); ?>サイト（現在: <?php echo number_format(getSiteCount('approved')); ?>サイト）</li>
             </ul>
         </div>
@@ -154,14 +137,25 @@ $categories = getCategories();
 
             <div class="form-group">
                 <label for="category_id">カテゴリ <span class="required">*</span></label>
-                <select id="category_id" name="category_id" required>
+                <select id="category_id" name="category_id" class="hierarchical-select" required>
                     <option value="">カテゴリを選択してください</option>
-                    <?php foreach ($categories as $category): ?>
+                    <?php 
+                    $select_categories = getCategoriesForSelect();
+                    $current_parent = '';
+                    foreach ($select_categories as $category): 
+                        if ($category['parent_name'] !== $current_parent && $category['parent_name'] !== ''):
+                            if ($current_parent !== '') echo '</optgroup>';
+                            echo '<optgroup label="' . h($category['parent_name']) . '">';
+                            $current_parent = $category['parent_name'];
+                        endif;
+                    ?>
                         <option value="<?php echo $category['id']; ?>" <?php echo (isset($category_id) && $category_id == $category['id']) ? 'selected' : ''; ?>>
-                            <?php echo h($category['name']); ?>
+                            <?php echo h($category['child_name']); ?>
                         </option>
                     <?php endforeach; ?>
+                    <?php if ($current_parent !== '') echo '</optgroup>'; ?>
                 </select>
+                <div class="help-text">該当する分類を選択してください</div>
             </div>
 
             <div class="form-group">
@@ -178,18 +172,10 @@ $categories = getCategories();
                 <div class="help-text">サイト情報編集時のログインに使用します</div>
             </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="password">パスワード <span class="required">*</span></label>
-                    <input type="password" id="password" name="password" minlength="6" required>
-                    <div class="help-text">6文字以上で入力してください</div>
-                </div>
-
-                <div class="form-group">
-                    <label for="password_confirm">パスワード確認 <span class="required">*</span></label>
-                    <input type="password" id="password_confirm" name="password_confirm" minlength="6" required>
-                    <div class="help-text">確認のため再度入力してください</div>
-                </div>
+            <div class="form-group">
+                <label for="password">パスワード <span class="required">*</span></label>
+                <input type="password" id="password" name="password" minlength="3" maxlength="8" required>
+                <div class="help-text">半角英数字3〜8文字で入力してください</div>
             </div>
 
             <button type="submit" class="submit-button">サイトを登録する</button>
@@ -197,23 +183,6 @@ $categories = getCategories();
     </div>
 
     <script>
-        // パスワード一致チェック
-        document.getElementById('password_confirm').addEventListener('input', function() {
-            const password = document.getElementById('password').value;
-            const confirm = this.value;
-            const helpText = this.nextElementSibling;
-            
-            if (confirm && password !== confirm) {
-                this.style.borderColor = '#dc3545';
-                helpText.style.color = '#dc3545';
-                helpText.textContent = 'パスワードが一致しません';
-            } else {
-                this.style.borderColor = '#ddd';
-                helpText.style.color = '#666';
-                helpText.textContent = '確認のため再度入力してください';
-            }
-        });
-
         // 文字数カウンター
         document.getElementById('title').addEventListener('input', function() {
             const maxLength = 100;

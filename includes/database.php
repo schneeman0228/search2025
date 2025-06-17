@@ -49,6 +49,8 @@ class Database {
                 url TEXT NOT NULL UNIQUE,
                 description TEXT,
                 category_id INTEGER NOT NULL,
+                email TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
                 status TEXT DEFAULT 'pending',
                 ip_address TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -81,6 +83,7 @@ class Database {
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_sites_category ON sites(category_id)");
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_sites_status ON sites(status)");
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id)");
+        $this->db->exec("CREATE INDEX IF NOT EXISTS idx_sites_email ON sites(email)");
         
         // 初期データの挿入（初回のみ）
         $this->insertInitialData();
@@ -97,24 +100,8 @@ class Database {
             $this->db->exec("INSERT INTO admins (username, password_hash, email) VALUES ('admin', '$defaultPassword', 'admin@example.com')");
         }
         
-        // 基本カテゴリの確認
-        $stmt = $this->db->query("SELECT COUNT(*) as count FROM categories");
-        $result = $stmt->fetch();
-        
-        if ($result['count'] == 0) {
-            // 基本カテゴリ挿入
-            $categories = [
-                ['name' => '総合', 'description' => '総合カテゴリ'],
-                ['name' => 'エンターテイメント', 'description' => 'エンターテイメント関連'],
-                ['name' => '趣味・娯楽', 'description' => '趣味・娯楽関連'],
-                ['name' => '創作', 'description' => '創作活動関連'],
-                ['name' => 'その他', 'description' => 'その他のカテゴリ']
-            ];
-            
-            foreach ($categories as $i => $category) {
-                $this->db->exec("INSERT INTO categories (name, description, sort_order) VALUES ('{$category['name']}', '{$category['description']}', $i)");
-            }
-        }
+        // 階層カテゴリの挿入
+        $this->insertHierarchicalCategories();
         
         // 基本設定の挿入
         $settings = [
@@ -133,6 +120,72 @@ class Database {
             if ($result['count'] == 0) {
                 $stmt = $this->db->prepare("INSERT INTO settings (key, value) VALUES (?, ?)");
                 $stmt->execute([$key, $value]);
+            }
+        }
+    }
+    
+    private function insertHierarchicalCategories() {
+        // 基本カテゴリの確認
+        $stmt = $this->db->query("SELECT COUNT(*) as count FROM categories");
+        $result = $stmt->fetch();
+        
+        if ($result['count'] == 0) {
+            // 親カテゴリの定義
+            $parent_categories = [
+                [
+                    'name' => 'コンテンツ',
+                    'description' => 'コンテンツの種類',
+                    'sort_order' => 1,
+                    'children' => [
+                        ['name' => '漫画', 'description' => '漫画・コミック', 'sort_order' => 1],
+                        ['name' => '小説', 'description' => '小説・文章', 'sort_order' => 2],
+                        ['name' => 'イラスト', 'description' => 'イラスト・絵', 'sort_order' => 3]
+                    ]
+                ],
+                [
+                    'name' => '年齢制限',
+                    'description' => '年齢制限の有無',
+                    'sort_order' => 2,
+                    'children' => [
+                        ['name' => '全年齢', 'description' => '全年齢対象', 'sort_order' => 1],
+                        ['name' => '成人向け', 'description' => '18禁・成人向け', 'sort_order' => 2]
+                    ]
+                ],
+                [
+                    'name' => '作品名',
+                    'description' => '取り扱い作品・ジャンル',
+                    'sort_order' => 3,
+                    'children' => [
+                        ['name' => 'AAA', 'description' => 'AAAシリーズ', 'sort_order' => 1],
+                        ['name' => 'BBB', 'description' => 'BBBシリーズ', 'sort_order' => 2]
+                    ]
+                ],
+                [
+                    'name' => '備考',
+                    'description' => 'サイトの特徴・備考',
+                    'sort_order' => 4,
+                    'children' => [
+                        ['name' => '雑多', 'description' => '雑多・複数ジャンル', 'sort_order' => 4],
+                        ['name' => 'オフライン活動', 'description' => 'オフライン・イベント活動', 'sort_order' => 6],
+                        ['name' => 'URL請求制', 'description' => 'URL請求制', 'sort_order' => 14],
+                        ['name' => 'パスワード制', 'description' => 'パスワード制', 'sort_order' => 15],
+                        ['name' => '一部パスワード制', 'description' => '一部パスワード制', 'sort_order' => 16],
+                        ]
+                ]
+            ];
+            
+            // 親カテゴリと子カテゴリを順次挿入
+            foreach ($parent_categories as $parent) {
+                // 親カテゴリを挿入
+                $stmt = $this->db->prepare("INSERT INTO categories (name, description, parent_id, sort_order) VALUES (?, ?, NULL, ?)");
+                $stmt->execute([$parent['name'], $parent['description'], $parent['sort_order']]);
+                $parent_id = $this->db->lastInsertId();
+                
+                // 子カテゴリを挿入
+                foreach ($parent['children'] as $child) {
+                    $stmt = $this->db->prepare("INSERT INTO categories (name, description, parent_id, sort_order) VALUES (?, ?, ?, ?)");
+                    $stmt->execute([$child['name'], $child['description'], $parent_id, $child['sort_order']]);
+                }
             }
         }
     }

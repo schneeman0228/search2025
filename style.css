@@ -1075,6 +1075,215 @@ body {
     margin-top: 30px;
 }
 
+
+
+/* ====================================================================
+   階層カテゴリ表示用CSS（style.cssに追加）
+   ==================================================================== */
+
+/* 階層カテゴリのメインコンテナ */
+.categories-hierarchical {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 25px;
+    margin-bottom: 30px;
+}
+
+/* カテゴリグループ（親カテゴリ + 子カテゴリのセット） */
+.category-group {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: transform 0.3s ease;
+}
+
+.category-group:hover {
+    transform: translateY(-2px);
+}
+
+/* 親カテゴリ部分 */
+.category-parent {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    text-align: center;
+}
+
+.category-parent h3 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.category-parent .category-description {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.category-parent .total-count {
+    background: rgba(255,255,255,0.2);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+/* 子カテゴリ部分 */
+.category-children {
+    padding: 15px;
+    background: #f8f9fa;
+}
+
+.category-child {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.category-child:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.category-child a {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #333;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.category-child a:hover {
+    background: #007cba;
+    color: white;
+    transform: translateX(5px);
+}
+
+.category-child .child-name {
+    font-weight: 500;
+    flex: 1;
+}
+
+.category-child .child-count {
+    background: #e9ecef;
+    color: #666;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.category-child a:hover .child-count {
+    background: rgba(255,255,255,0.2);
+    color: white;
+}
+
+.category-child .child-description {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+    padding-left: 12px;
+    font-style: italic;
+}
+
+/* パンくずナビの改良 */
+.breadcrumb-enhanced {
+    background: #f8f9fa;
+    padding: 12px 20px;
+    border-radius: 8px;
+    margin-bottom: 25px;
+    border-left: 4px solid #007cba;
+}
+
+.breadcrumb-enhanced .parent-category {
+    font-weight: bold;
+    color: #007cba;
+}
+
+.breadcrumb-enhanced .child-category {
+    color: #333;
+}
+
+.breadcrumb-enhanced .separator {
+    margin: 0 8px;
+    color: #666;
+}
+
+/* 登録フォーム用の階層セレクト */
+.hierarchical-select optgroup {
+    font-weight: bold;
+    background: #f8f9fa;
+    color: #333;
+}
+
+.hierarchical-select option {
+    padding: 8px 15px;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .categories-hierarchical {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .category-parent {
+        padding: 15px;
+    }
+    
+    .category-parent h3 {
+        font-size: 16px;
+    }
+    
+    .category-children {
+        padding: 12px;
+    }
+    
+    .category-child a {
+        padding: 10px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .category-child .child-count {
+        align-self: flex-end;
+    }
+}
+
+/* 備考カテゴリ専用のコンパクト表示 */
+.category-group.notes-category .category-children {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+}
+
+.category-group.notes-category .category-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.category-group.notes-category .category-child a {
+    padding: 6px 10px;
+    font-size: 13px;
+    justify-content: center;
+    text-align: center;
+}
+
+.category-group.notes-category .child-description {
+    display: none;
+}
+
 /* ====================================================================
    レスポンシブデザイン
    ==================================================================== */
@@ -1140,4 +1349,9 @@ body {
     .requirement-value {
         margin: 0;
     }
+
+    .category-group.notes-category .category-children {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+    
 }

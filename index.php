@@ -8,16 +8,18 @@ $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 
 // カテゴリ情報
 $current_category = null;
+$category_path = [];
 if ($category_id) {
     $current_category = getCategory($category_id);
+    $category_path = getCategoryPath($category_id);
 }
 
 // サイト一覧取得
 $sites = getSites($category_id, $search, $page, $SITES_PER_PAGE);
 $total_sites = getSitesCount($category_id, $search);
 
-// カテゴリ一覧取得
-$categories = getCategories();
+// 階層カテゴリ一覧取得
+$hierarchical_categories = getCategoriesHierarchical();
 
 // ページネーション用URL
 $base_url = '?';
@@ -55,40 +57,30 @@ $base_url = rtrim($base_url, '&');
             </form>
         </div>
 
-        <!-- パンくずナビ -->
-        <?php if ($current_category || $search): ?>
-            <div class="breadcrumb">
+        <!-- パンくずナビ（改良版） -->
+        <?php if (!empty($category_path) || $search): ?>
+            <div class="breadcrumb-enhanced">
                 <a href="?">ホーム</a>
-                <?php if ($current_category): ?>
-                    &gt; <?php echo h($current_category['name']); ?>
+                <?php if (!empty($category_path)): ?>
+                    <?php foreach ($category_path as $index => $cat): ?>
+                        <span class="separator">></span>
+                        <?php if ($index === 0): ?>
+                            <span class="parent-category"><?php echo h($cat['name']); ?></span>
+                        <?php else: ?>
+                            <span class="child-category"><?php echo h($cat['name']); ?></span>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
                 <?php endif; ?>
                 <?php if ($search): ?>
-                    &gt; 検索: "<?php echo h($search); ?>"
+                    <span class="separator">></span>
+                    <span>検索: "<?php echo h($search); ?>"</span>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
 
-        <!-- カテゴリ一覧（トップページのみ） -->
+        <!-- 階層カテゴリ一覧（トップページのみ） -->
         <?php if (!$search && !$category_id): ?>
-            <div class="categories">
-                <?php foreach ($categories as $category): ?>
-                    <div class="category-item">
-                        <div>
-                            <a href="?category=<?php echo $category['id']; ?>">
-                                <?php echo h($category['name']); ?>
-                            </a>
-                        </div>
-                        <div class="site-count">
-                            (<?php echo getCategorySiteCount($category['id']); ?>)
-                        </div>
-                        <?php if ($category['description']): ?>
-                            <div style="font-size: 0.85em; color: #888; margin-top: 5px;">
-                                <?php echo h($category['description']); ?>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-            </div>
+            <?php echo generateHierarchicalCategoryHTML($hierarchical_categories); ?>
         <?php endif; ?>
 
         <!-- サイト一覧 -->
@@ -139,7 +131,7 @@ $base_url = rtrim($base_url, '&');
         <div class="nav-links">
             <a href="register.php">サイト登録</a>
             <a href="user_login.php">サイト情報編集</a>
-            <a href="admin/">管理画面</a>
+            <a href="admin/login.php">管理画面</a>
         </div>
     </div>
 </body>
