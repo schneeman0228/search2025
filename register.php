@@ -1,3 +1,4 @@
+
 <?php
 require_once 'includes/config.php';
 
@@ -112,9 +113,14 @@ $hierarchical_categories = getCategoriesHierarchical();
         <div class="guidelines">
             <h3>登録について</h3>
             <ul>
-                <li>登録されたサイトは管理者の承認後に掲載されます</li>
-                <li>承認後、登録したメールアドレスとパスワードでログインして情報を編集できます</li>
-                <li>不適切なサイトや規約に反するサイトは承認されない場合があります</li>
+                <?php if ($REQUIRE_APPROVAL): ?>
+                    <li><strong>承認制です</strong> - 登録されたサイトは管理者の承認後に掲載されます</li>
+                    <li>承認後、登録したメールアドレスとパスワードでログインして情報を編集できます</li>
+                <?php else: ?>
+                    <li><strong>自動承認です</strong> - 登録されたサイトはすぐにサイト一覧に掲載されます</li>
+                    <li>登録後、すぐにメールアドレスとパスワードでログインして情報を編集できます</li>
+                <?php endif; ?>
+                <li>不適切なサイトや規約に反するサイトは削除される場合があります</li>
                 <li>同一のURLは重複して登録できません（メールアドレスは重複OK）</li>
                 <li>登録可能サイト数: <?php echo number_format($MAX_SITES); ?>サイト（現在: <?php echo number_format(getSiteCount('approved')); ?>サイト）</li>
                 <li><strong>複数のカテゴリを選択可能です</strong>（例：漫画 + 全年齢 + オリジナル + 交流）</li>

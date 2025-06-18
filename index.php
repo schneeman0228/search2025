@@ -50,7 +50,7 @@ $base_url = rtrim($base_url, '&');
 <body class="page-index">
     <div class="container">
         <div class="header">
-            <h1><?php echo h($SITE_TITLE); ?></h1>
+            <h1><a href ="index.php"><?php echo h($SITE_TITLE); ?></a></h1>
             <p><?php echo h($SITE_DESCRIPTION); ?></p>
         </div>
 

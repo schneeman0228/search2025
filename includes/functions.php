@@ -507,13 +507,17 @@ function registerSiteWithUser($title, $url, $description, $category_ids, $email,
         return ['success' => false, 'message' => 'サイト登録数が上限に達しています。'];
     }
     
+    // 承認制設定を確認
+    $require_approval = getSetting('require_approval', '1');
+    $status = ($require_approval === '1') ? 'pending' : 'approved';
+    
     try {
         $db->beginTransaction();
         
         // サイト登録
         $password_hash = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = $db->prepare("INSERT INTO sites (title, url, description, email, password_hash, ip_address, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')");
-        $stmt->execute([$title, $url, $description, $email, $password_hash, $ip_address]);
+        $stmt = $db->prepare("INSERT INTO sites (title, url, description, email, password_hash, ip_address, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$title, $url, $description, $email, $password_hash, $ip_address, $status]);
         $site_id = $db->lastInsertId();
         
         // カテゴリ関連付け
@@ -522,7 +526,13 @@ function registerSiteWithUser($title, $url, $description, $category_ids, $email,
         }
         
         $db->commit();
-        return ['success' => true, 'message' => 'サイトを登録しました。管理者の承認をお待ちください。'];
+        
+        // メッセージを承認制設定に応じて変更
+        if ($status === 'approved') {
+            return ['success' => true, 'message' => 'サイトを登録しました。すぐにサイト一覧に表示されます。'];
+        } else {
+            return ['success' => true, 'message' => 'サイトを登録しました。管理者の承認をお待ちください。'];
+        }
     } catch (Exception $e) {
         if ($db->inTransaction()) {
             $db->rollback();
