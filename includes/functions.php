@@ -568,31 +568,230 @@ function generateHierarchicalCategoryHTML($categories) {
     return $html;
 }
 
-// カテゴリフィルタ用チェックボックスHTML生成
-function generateCategoryFilterHTML($hierarchical_categories, $selected_categories = []) {
-    $html = '<div class="category-filter">';
-    $html .= '<h4>カテゴリで絞り込み</h4>';
-    
-    foreach ($hierarchical_categories as $parent) {
-        $html .= '<div class="filter-group">';
-        $html .= '<div class="filter-parent">' . h($parent['name']) . '</div>';
+// ====================================================================
+// カテゴリ管理関数（管理画面用）
+// ====================================================================
+
+// カテゴリを追加
+function addCategory($name, $description = '', $parent_id = null, $sort_order = 0) {
+    global $db;
+    try {
+        $stmt = $db->prepare("INSERT INTO categories (name, description, parent_id, sort_order) VALUES (?, ?, ?, ?)");
+        return $stmt->execute([$name, $description, $parent_id ?: null, $sort_order]);
+    } catch (PDOException $e) {
+        return false;
+    }
+}
+
+// カテゴリを更新
+function updateCategory($id, $name, $description = '', $sort_order = 0) {
+    global $db;
+    try {
+        $stmt = $db->prepare("UPDATE categories SET name = ?, description = ?, sort_order = ? WHERE id = ?");
+        return $stmt->execute([$name, $description, $sort_order, $id]);
+    } catch (PDOException $e) {
+        return false;
+    }
+}
+
+// カテゴリを削除（安全性チェック付き）
+function deleteCategory($id) {
+    global $db;
+    try {
+        $db->beginTransaction();
         
-        if (!empty($parent['children'])) {
-            $html .= '<div class="filter-children">';
-            foreach ($parent['children'] as $child) {
-                $checked = in_array($child['id'], $selected_categories) ? 'checked' : '';
-                $html .= '<label class="filter-checkbox">';
-                $html .= '<input type="checkbox" name="categories[]" value="' . $child['id'] . '" ' . $checked . '>';
-                $html .= '<span>' . h($child['name']) . ' (' . $child['site_count'] . ')</span>';
-                $html .= '</label>';
-            }
-            $html .= '</div>';
+        // 子カテゴリがあるかチェック
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM categories WHERE parent_id = ?");
+        $stmt->execute([$id]);
+        $result = $stmt->fetch();
+        
+        if ($result['count'] > 0) {
+            $db->rollback();
+            return ['success' => false, 'message' => '子カテゴリが存在するため削除できません。'];
         }
         
-        $html .= '</div>';
+        // 関連サイトがあるかチェック
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM site_categories WHERE category_id = ?");
+        $stmt->execute([$id]);
+        $result = $stmt->fetch();
+        
+        if ($result['count'] > 0) {
+            $db->rollback();
+            return ['success' => false, 'message' => 'このカテゴリに登録されているサイトがあるため削除できません。'];
+        }
+        
+        // カテゴリ削除
+        $stmt = $db->prepare("DELETE FROM categories WHERE id = ?");
+        $stmt->execute([$id]);
+        
+        $db->commit();
+        return ['success' => true, 'message' => 'カテゴリを削除しました。'];
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollback();
+        }
+        return ['success' => false, 'message' => 'データベースエラーが発生しました。'];
+    }
+}
+
+// 親カテゴリのリストを取得
+function getParentCategories() {
+    global $db;
+    $stmt = $db->prepare("SELECT * FROM categories WHERE parent_id IS NULL ORDER BY sort_order, name");
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
+
+// カテゴリの詳細情報を取得
+function getCategoryDetails($id) {
+    global $db;
+    $stmt = $db->prepare("
+        SELECT c.*, pc.name as parent_name 
+        FROM categories c 
+        LEFT JOIN categories pc ON c.parent_id = pc.id 
+        WHERE c.id = ?
+    ");
+    $stmt->execute([$id]);
+    return $stmt->fetch();
+}
+
+// カテゴリの並び順を更新
+function updateCategoryOrder($id, $sort_order) {
+    global $db;
+    try {
+        $stmt = $db->prepare("UPDATE categories SET sort_order = ? WHERE id = ?");
+        return $stmt->execute([$sort_order, $id]);
+    } catch (PDOException $e) {
+        return false;
+    }
+}
+
+// カテゴリの並び順を自動調整
+function reorderCategories($parent_id = null) {
+    global $db;
+    try {
+        $sql = "SELECT id FROM categories WHERE " . ($parent_id ? "parent_id = ?" : "parent_id IS NULL") . " ORDER BY sort_order, name";
+        $stmt = $db->prepare($sql);
+        if ($parent_id) {
+            $stmt->execute([$parent_id]);
+        } else {
+            $stmt->execute();
+        }
+        
+        $categories = $stmt->fetchAll();
+        $update_stmt = $db->prepare("UPDATE categories SET sort_order = ? WHERE id = ?");
+        
+        foreach ($categories as $index => $category) {
+            $update_stmt->execute([($index + 1) * 10, $category['id']]);
+        }
+        
+        return true;
+    } catch (PDOException $e) {
+        return false;
+    }
+}
+
+// カテゴリ名重複チェック
+function isCategoryNameExists($name, $parent_id = null, $exclude_id = null) {
+    global $db;
+    try {
+        $sql = "SELECT COUNT(*) as count FROM categories WHERE name = ? AND " . 
+               ($parent_id ? "parent_id = ?" : "parent_id IS NULL");
+        
+        if ($exclude_id) {
+            $sql .= " AND id != ?";
+        }
+        
+        $stmt = $db->prepare($sql);
+        $params = [$name];
+        if ($parent_id) $params[] = $parent_id;
+        if ($exclude_id) $params[] = $exclude_id;
+        
+        $stmt->execute($params);
+        $result = $stmt->fetch();
+        
+        return $result['count'] > 0;
+    } catch (PDOException $e) {
+        return false;
+    }
+}
+
+// ====================================================================
+// 設定管理関数
+// ====================================================================
+
+// 全設定を取得
+function getAllSettings() {
+    global $db;
+    try {
+        $stmt = $db->query("SELECT key, value FROM settings ORDER BY key");
+        $settings = [];
+        while ($row = $stmt->fetch()) {
+            $settings[$row['key']] = $row['value'];
+        }
+        return $settings;
+    } catch (PDOException $e) {
+        return [];
+    }
+}
+
+// 複数設定を一括更新
+function updateSettings($settings) {
+    global $db;
+    try {
+        $db->beginTransaction();
+        
+        $stmt = $db->prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))");
+        
+        foreach ($settings as $key => $value) {
+            $stmt->execute([$key, $value]);
+        }
+        
+        $db->commit();
+        return ['success' => true, 'message' => '設定を更新しました。'];
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollback();
+        }
+        return ['success' => false, 'message' => 'データベースエラーが発生しました。'];
+    }
+}
+
+// 設定値のバリデーション
+function validateSettings($settings) {
+    $errors = [];
+    
+    // サイトタイトル
+    if (empty($settings['site_title'])) {
+        $errors[] = 'サイトタイトルは必須です。';
+    } elseif (strlen($settings['site_title']) > 100) {
+        $errors[] = 'サイトタイトルは100文字以内で入力してください。';
     }
     
-    $html .= '</div>';
-    return $html;
+    // サイト説明
+    if (strlen($settings['site_description']) > 500) {
+        $errors[] = 'サイト説明は500文字以内で入力してください。';
+    }
+    
+    // 最大サイト数
+    if (!is_numeric($settings['max_sites']) || $settings['max_sites'] < 1) {
+        $errors[] = '最大サイト数は1以上の数値で入力してください。';
+    } elseif ($settings['max_sites'] > 10000) {
+        $errors[] = '最大サイト数は10000以下で入力してください。';
+    }
+    
+    // 1ページあたりサイト数
+    if (!is_numeric($settings['sites_per_page']) || $settings['sites_per_page'] < 1) {
+        $errors[] = '1ページあたりサイト数は1以上の数値で入力してください。';
+    } elseif ($settings['sites_per_page'] > 100) {
+        $errors[] = '1ページあたりサイト数は100以下で入力してください。';
+    }
+    
+    // 承認制
+    if (!in_array($settings['require_approval'], ['0', '1'])) {
+        $errors[] = '承認制の設定が不正です。';
+    }
+    
+    return $errors;
 }
 ?>

@@ -51,7 +51,7 @@ function updateSetting($key, $value) {
 $SITE_TITLE = getSetting('site_title', 'ディレクトリサーチ');
 $SITE_DESCRIPTION = getSetting('site_description', '複数カテゴリ対応ディレクトリ型サーチエンジン');
 $MAX_SITES = (int)getSetting('max_sites', 2000);
-$SITES_PER_PAGE = (int)getSetting('sites_per_page', 20);
+$SITES_PER_PAGE = (int)getSetting('sites_per_page', 2);
 $REQUIRE_APPROVAL = (bool)getSetting('require_approval', true);
 
 // 検索避け設定
