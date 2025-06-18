@@ -43,15 +43,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $title = trim($_POST['title'] ?? '');
                 $url = trim($_POST['url'] ?? '');
                 $description = trim($_POST['description'] ?? '');
-                $category_id = (int)($_POST['category_id'] ?? 0);
+                $category_ids = isset($_POST['category_ids']) && is_array($_POST['category_ids']) ? array_map('intval', $_POST['category_ids']) : [];
                 
-                if ($site_id > 0 && !empty($title) && !empty($url) && $category_id > 0) {
-                    $stmt = $db->prepare("UPDATE sites SET title = ?, url = ?, description = ?, category_id = ?, updated_at = datetime('now') WHERE id = ?");
-                    if ($stmt->execute([$title, $url, $description, $category_id, $site_id])) {
+                if ($site_id > 0 && !empty($title) && !empty($url) && !empty($category_ids)) {
+                    try {
+                        $db->beginTransaction();
+                        
+                        // サイト情報更新
+                        $stmt = $db->prepare("UPDATE sites SET title = ?, url = ?, description = ?, updated_at = datetime('now') WHERE id = ?");
+                        $stmt->execute([$title, $url, $description, $site_id]);
+                        
+                        // カテゴリ更新
+                        if (!updateSiteCategories($site_id, $category_ids)) {
+                            throw new Exception('カテゴリの更新に失敗しました。');
+                        }
+                        
+                        $db->commit();
                         $message = 'サイト情報を更新しました。';
-                    } else {
+                    } catch (Exception $e) {
+                        if ($db->inTransaction()) {
+                            $db->rollback();
+                        }
                         $error = '更新に失敗しました。';
                     }
+                } else {
+                    $error = '必要な情報が入力されていません。';
                 }
                 break;
                 
@@ -88,29 +104,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $tab = $_GET['tab'] ?? 'sites';
 $status = $_GET['status'] ?? 'pending';
 $search = $_GET['search'] ?? '';
-$category_id = isset($_GET['category']) ? (int)$_GET['category'] : null;
+$category_ids = isset($_GET['categories']) && is_array($_GET['categories']) ? array_map('intval', $_GET['categories']) : [];
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 
 // サイト一覧取得
-$sites = getSites($category_id, $search, $page, $SITES_PER_PAGE, $status);
-$total_sites = getSitesCount($category_id, $search, $status);
+$sites = getSites($category_ids, $search, $page, $SITES_PER_PAGE, $status);
+$total_sites = getSitesCount($category_ids, $search, $status);
 
-// カテゴリ一覧取得
-$categories = getCategories();
+// 階層カテゴリ一覧取得
+$hierarchical_categories = getCategoriesHierarchical();
 
 // 編集対象のサイト情報
 $edit_site = null;
+$edit_site_categories = [];
 if (isset($_GET['edit'])) {
     $edit_id = (int)$_GET['edit'];
     $stmt = $db->prepare("SELECT * FROM sites WHERE id = ?");
     $stmt->execute([$edit_id]);
     $edit_site = $stmt->fetch();
+    if ($edit_site) {
+        $edit_site_categories = array_column(getSiteCategories($edit_id), 'id');
+    }
 }
 
 // ページネーション用URL
 $base_url = "?tab={$tab}&status={$status}";
 if ($search) $base_url .= '&search=' . urlencode($search);
-if ($category_id) $base_url .= '&category=' . $category_id;
+foreach ($category_ids as $cat_id) {
+    $base_url .= '&categories[]=' . $cat_id;
+}
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -171,16 +193,27 @@ if ($category_id) $base_url .= '&category=' . $category_id;
                                 </div>
                             </div>
                             
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>カテゴリ</label>
-                                    <select name="category_id" required>
-                                        <?php foreach ($categories as $category): ?>
-                                            <option value="<?php echo $category['id']; ?>" <?php echo $category['id'] == $edit_site['category_id'] ? 'selected' : ''; ?>>
-                                                <?php echo h($category['name']); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                            <div class="form-group">
+                                <label>カテゴリ</label>
+                                <div class="category-selection-admin">
+                                    <?php foreach ($hierarchical_categories as $parent): ?>
+                                        <div class="category-group-admin">
+                                            <strong><?php echo h($parent['name']); ?></strong>
+                                            <?php if (!empty($parent['children'])): ?>
+                                                <div class="category-children-admin">
+                                                    <?php foreach ($parent['children'] as $child): ?>
+                                                        <label class="category-checkbox-admin">
+                                                            <input type="checkbox" 
+                                                                   name="category_ids[]" 
+                                                                   value="<?php echo $child['id']; ?>"
+                                                                   <?php echo in_array($child['id'], $edit_site_categories) ? 'checked' : ''; ?>>
+                                                            <?php echo h($child['name']); ?>
+                                                        </label>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
                                 </div>
                             </div>
                             
@@ -207,19 +240,40 @@ if ($category_id) $base_url .= '&category=' . $category_id;
                             <option value="approved" <?php echo $status === 'approved' ? 'selected' : ''; ?>>承認済み</option>
                         </select>
                         
-                        <select name="category" onchange="this.form.submit()">
-                            <option value="">全カテゴリ</option>
-                            <?php foreach ($categories as $category): ?>
-                                <option value="<?php echo $category['id']; ?>" <?php echo $category_id == $category['id'] ? 'selected' : ''; ?>>
-                                    <?php echo h($category['name']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                        
                         <input type="text" name="search" value="<?php echo h($search); ?>" placeholder="検索...">
+                        
+                        <!-- カテゴリフィルタ -->
+                        <details class="category-filter-dropdown">
+                            <summary>カテゴリ絞り込み 
+                                <?php if (!empty($category_ids)): ?>
+                                    (<?php echo count($category_ids); ?>件選択)
+                                <?php endif; ?>
+                            </summary>
+                            <div class="filter-content">
+                                <?php foreach ($hierarchical_categories as $parent): ?>
+                                    <div class="filter-group-admin">
+                                        <div class="filter-parent-admin"><?php echo h($parent['name']); ?></div>
+                                        <?php if (!empty($parent['children'])): ?>
+                                            <div class="filter-children-admin">
+                                                <?php foreach ($parent['children'] as $child): ?>
+                                                    <label class="filter-checkbox-admin">
+                                                        <input type="checkbox" 
+                                                               name="categories[]" 
+                                                               value="<?php echo $child['id']; ?>"
+                                                               <?php echo in_array($child['id'], $category_ids) ? 'checked' : ''; ?>>
+                                                        <?php echo h($child['name']); ?> (<?php echo $child['site_count']; ?>)
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </details>
+                        
                         <button type="submit" class="btn">検索</button>
                         
-                        <?php if ($search || $category_id): ?>
+                        <?php if ($search || !empty($category_ids)): ?>
                             <a href="?tab=sites&status=<?php echo $status; ?>" class="btn" style="background: #6c757d;">クリア</a>
                         <?php endif; ?>
                     </form>
@@ -268,7 +322,15 @@ if ($category_id) $base_url .= '&category=' . $category_id;
                                                 </div>
                                             <?php endif; ?>
                                         </td>
-                                        <td><?php echo h($site['category_name']); ?></td>
+                                        <td>
+                                            <div class="categories-display">
+                                                <?php foreach ($site['categories'] as $cat): ?>
+                                                    <span class="category-badge">
+                                                        <?php echo $cat['parent_name'] ? h($cat['parent_name'] . ' > ' . $cat['name']) : h($cat['name']); ?>
+                                                    </span>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </td>
                                         <td><?php echo date('Y/m/d H:i', strtotime($site['created_at'])); ?></td>
                                         <td>
                                             <div class="actions">
@@ -316,18 +378,33 @@ if ($category_id) $base_url .= '&category=' . $category_id;
                 <table class="site-table">
                     <thead>
                         <tr>
-                            <th>カテゴリ名</th>
+                            <th>親カテゴリ</th>
+                            <th>子カテゴリ</th>
                             <th>説明</th>
                             <th>サイト数</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($categories as $category): ?>
-                            <tr>
-                                <td><?php echo h($category['name']); ?></td>
-                                <td><?php echo h($category['description']); ?></td>
-                                <td><?php echo getCategorySiteCount($category['id']); ?></td>
-                            </tr>
+                        <?php foreach ($hierarchical_categories as $parent): ?>
+                            <?php if (!empty($parent['children'])): ?>
+                                <?php foreach ($parent['children'] as $i => $child): ?>
+                                    <tr>
+                                        <?php if ($i === 0): ?>
+                                            <td rowspan="<?php echo count($parent['children']); ?>"><?php echo h($parent['name']); ?></td>
+                                        <?php endif; ?>
+                                        <td><?php echo h($child['name']); ?></td>
+                                        <td><?php echo h($child['description']); ?></td>
+                                        <td><?php echo $child['site_count']; ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr>
+                                    <td><?php echo h($parent['name']); ?></td>
+                                    <td>-</td>
+                                    <td><?php echo h($parent['description']); ?></td>
+                                    <td><?php echo getCategorySiteCount($parent['id']); ?></td>
+                                </tr>
+                            <?php endif; ?>
                         <?php endforeach; ?>
                     </tbody>
                 </table>

@@ -44,14 +44,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <div class="info-box">
-            <strong>デフォルトログイン情報:</strong>
+            <strong>デフォルトログイン情報:</strong><br>
             ユーザー名: admin<br>
             パスワード: admin123<br>
             <small>※初回ログイン後、必ずパスワードを変更してください</small>
         </div>
 
         <?php if ($error): ?>
-            <div class="error-message"><?php echo h($error); ?></div>
+            <div class="message error"><?php echo h($error); ?></div>
         <?php endif; ?>
 
         <form method="POST" action="">

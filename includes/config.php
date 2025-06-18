@@ -26,26 +26,48 @@ $db = $database->getConnection();
 // サイト設定を取得
 function getSetting($key, $default = '') {
     global $db;
-    $stmt = $db->prepare("SELECT value FROM settings WHERE key = ?");
-    $stmt->execute([$key]);
-    $result = $stmt->fetch();
-    return $result ? $result['value'] : $default;
+    try {
+        $stmt = $db->prepare("SELECT value FROM settings WHERE key = ?");
+        $stmt->execute([$key]);
+        $result = $stmt->fetch();
+        return $result ? $result['value'] : $default;
+    } catch (PDOException $e) {
+        return $default;
+    }
 }
 
 // サイト設定を更新
 function updateSetting($key, $value) {
     global $db;
-    $stmt = $db->prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))");
-    return $stmt->execute([$key, $value]);
+    try {
+        $stmt = $db->prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))");
+        return $stmt->execute([$key, $value]);
+    } catch (PDOException $e) {
+        return false;
+    }
 }
 
-// 基本設定
+// 基本設定の取得
 $SITE_TITLE = getSetting('site_title', 'ディレクトリサーチ');
-$SITE_DESCRIPTION = getSetting('site_description', 'ディレクトリ型サーチエンジン');
+$SITE_DESCRIPTION = getSetting('site_description', '複数カテゴリ対応ディレクトリ型サーチエンジン');
 $MAX_SITES = (int)getSetting('max_sites', 2000);
 $SITES_PER_PAGE = (int)getSetting('sites_per_page', 20);
 $REQUIRE_APPROVAL = (bool)getSetting('require_approval', true);
 
 // 検索避け設定
 $ROBOTS_CONTENT = "noindex, nofollow, noarchive, nosnippet";
+
+// 本番環境用の追加設定（必要に応じてコメントアウト）
+/*
+// HTTPS強制
+if (!isset($_SERVER['HTTPS']) || $_SERVER['HTTPS'] !== 'on') {
+    $redirect_url = 'https://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+    header("Location: $redirect_url", true, 301);
+    exit;
+}
+
+// エラー表示を無効化（本番環境）
+error_reporting(0);
+ini_set('display_errors', 0);
+*/
 ?>

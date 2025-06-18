@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $title = trim($_POST['title'] ?? '');
         $url = trim($_POST['url'] ?? '');
         $description = trim($_POST['description'] ?? '');
-        $category_id = (int)($_POST['category_id'] ?? 0);
+        $category_ids = isset($_POST['category_ids']) && is_array($_POST['category_ids']) ? array_map('intval', $_POST['category_ids']) : [];
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         $ip_address = $_SERVER['REMOTE_ADDR'];
@@ -26,8 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'URLを入力してください。';
         } elseif (!isValidUrl($url)) {
             $error = '有効なURLを入力してください。';
-        } elseif ($category_id <= 0) {
-            $error = 'カテゴリを選択してください。';
+        } elseif (empty($category_ids)) {
+            $error = '少なくとも1つのカテゴリを選択してください。';
         } elseif (empty($email)) {
             $error = 'メールアドレスを入力してください。';
         } elseif (!isValidEmail($email)) {
@@ -57,13 +57,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = 'サイト登録数が上限に達しています。';
                 } else {
                     // サイト登録実行
-                    $result = registerSiteWithUser($title, $url, $description, $category_id, $email, $password, $ip_address);
+                    $result = registerSiteWithUser($title, $url, $description, $category_ids, $email, $password, $ip_address);
                     
                     if ($result['success']) {
                         $message = $result['message'];
                         // フォームクリア
                         $title = $url = $description = $email = '';
-                        $category_id = 0;
+                        $category_ids = [];
                     } else {
                         $error = $result['message'];
                     }
@@ -73,8 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// カテゴリ一覧取得
-$categories = getCategories();
+// 階層カテゴリ一覧取得
+$hierarchical_categories = getCategoriesHierarchical();
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -117,6 +117,7 @@ $categories = getCategories();
                 <li>不適切なサイトや規約に反するサイトは承認されない場合があります</li>
                 <li>同一のURLは重複して登録できません（メールアドレスは重複OK）</li>
                 <li>登録可能サイト数: <?php echo number_format($MAX_SITES); ?>サイト（現在: <?php echo number_format(getSiteCount('approved')); ?>サイト）</li>
+                <li><strong>複数のカテゴリを選択可能です</strong>（例：漫画 + 全年齢 + オリジナル + 交流）</li>
             </ul>
         </div>
 
@@ -136,26 +137,38 @@ $categories = getCategories();
             </div>
 
             <div class="form-group">
-                <label for="category_id">カテゴリ <span class="required">*</span></label>
-                <select id="category_id" name="category_id" class="hierarchical-select" required>
-                    <option value="">カテゴリを選択してください</option>
-                    <?php 
-                    $select_categories = getCategoriesForSelect();
-                    $current_parent = '';
-                    foreach ($select_categories as $category): 
-                        if ($category['parent_name'] !== $current_parent && $category['parent_name'] !== ''):
-                            if ($current_parent !== '') echo '</optgroup>';
-                            echo '<optgroup label="' . h($category['parent_name']) . '">';
-                            $current_parent = $category['parent_name'];
-                        endif;
-                    ?>
-                        <option value="<?php echo $category['id']; ?>" <?php echo (isset($category_id) && $category_id == $category['id']) ? 'selected' : ''; ?>>
-                            <?php echo h($category['child_name']); ?>
-                        </option>
+                <label>カテゴリ <span class="required">*</span></label>
+                <div class="help-text" style="margin-bottom: 15px;">該当するカテゴリを複数選択できます。サイトの特徴に合うものをすべて選択してください。</div>
+                
+                <div class="category-selection">
+                    <?php foreach ($hierarchical_categories as $parent): ?>
+                        <div class="category-group-selection">
+                            <div class="category-parent-header">
+                                <h4><?php echo h($parent['name']); ?></h4>
+                                <p class="category-parent-desc"><?php echo h($parent['description']); ?></p>
+                            </div>
+                            
+                            <?php if (!empty($parent['children'])): ?>
+                                <div class="category-children-selection">
+                                    <?php foreach ($parent['children'] as $child): ?>
+                                        <label class="category-checkbox">
+                                            <input type="checkbox" 
+                                                   name="category_ids[]" 
+                                                   value="<?php echo $child['id']; ?>"
+                                                   <?php echo (isset($category_ids) && in_array($child['id'], $category_ids)) ? 'checked' : ''; ?>>
+                                            <span class="checkbox-label">
+                                                <strong><?php echo h($child['name']); ?></strong>
+                                                <?php if ($child['description']): ?>
+                                                    <small><?php echo h($child['description']); ?></small>
+                                                <?php endif; ?>
+                                            </span>
+                                        </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
                     <?php endforeach; ?>
-                    <?php if ($current_parent !== '') echo '</optgroup>'; ?>
-                </select>
-                <div class="help-text">該当する分類を選択してください</div>
+                </div>
             </div>
 
             <div class="form-group">
@@ -176,6 +189,12 @@ $categories = getCategories();
                 <label for="password">パスワード <span class="required">*</span></label>
                 <input type="password" id="password" name="password" minlength="3" maxlength="8" required>
                 <div class="help-text">半角英数字3〜8文字で入力してください</div>
+            </div>
+
+            <!-- 選択されたカテゴリの表示 -->
+            <div class="selected-categories" id="selected-categories" style="display: none;">
+                <h4>選択中のカテゴリ</h4>
+                <div id="selected-list"></div>
             </div>
 
             <button type="submit" class="submit-button">サイトを登録する</button>
@@ -207,6 +226,36 @@ $categories = getCategories();
                 helpText.style.color = '#666';
             }
         });
+
+        // 選択されたカテゴリの表示更新
+        function updateSelectedCategories() {
+            const checkboxes = document.querySelectorAll('input[name="category_ids[]"]:checked');
+            const selectedDiv = document.getElementById('selected-categories');
+            const listDiv = document.getElementById('selected-list');
+            
+            if (checkboxes.length > 0) {
+                selectedDiv.style.display = 'block';
+                let html = '';
+                
+                checkboxes.forEach(function(checkbox) {
+                    const label = checkbox.parentNode.querySelector('.checkbox-label strong').textContent;
+                    const parentGroup = checkbox.closest('.category-group-selection').querySelector('h4').textContent;
+                    html += '<span class="selected-tag">' + parentGroup + ' > ' + label + '</span>';
+                });
+                
+                listDiv.innerHTML = html;
+            } else {
+                selectedDiv.style.display = 'none';
+            }
+        }
+
+        // カテゴリチェックボックスの変更を監視
+        document.querySelectorAll('input[name="category_ids[]"]').forEach(function(checkbox) {
+            checkbox.addEventListener('change', updateSelectedCategories);
+        });
+
+        // 初期表示時の選択状態を反映
+        updateSelectedCategories();
     </script>
 </body>
 </html>

@@ -41,21 +41,32 @@ class Database {
             )
         ");
         
-        // サイト情報テーブル
+        // サイト情報テーブル（category_idを削除）
         $this->db->exec("
             CREATE TABLE IF NOT EXISTS sites (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 url TEXT NOT NULL UNIQUE,
                 description TEXT,
-                category_id INTEGER NOT NULL,
                 email TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
                 status TEXT DEFAULT 'pending',
                 ip_address TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (category_id) REFERENCES categories(id)
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ");
+        
+        // サイト-カテゴリ関連テーブル（多対多）
+        $this->db->exec("
+            CREATE TABLE IF NOT EXISTS site_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                site_id INTEGER NOT NULL,
+                category_id INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+                FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+                UNIQUE(site_id, category_id)
             )
         ");
         
@@ -80,7 +91,8 @@ class Database {
         ");
         
         // インデックス作成
-        $this->db->exec("CREATE INDEX IF NOT EXISTS idx_sites_category ON sites(category_id)");
+        $this->db->exec("CREATE INDEX IF NOT EXISTS idx_site_categories_site ON site_categories(site_id)");
+        $this->db->exec("CREATE INDEX IF NOT EXISTS idx_site_categories_category ON site_categories(category_id)");
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_sites_status ON sites(status)");
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id)");
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_sites_email ON sites(email)");
@@ -139,7 +151,8 @@ class Database {
                     'children' => [
                         ['name' => '漫画', 'description' => '漫画・コミック', 'sort_order' => 1],
                         ['name' => '小説', 'description' => '小説・文章', 'sort_order' => 2],
-                        ['name' => 'イラスト', 'description' => 'イラスト・絵', 'sort_order' => 3]
+                        ['name' => 'イラスト', 'description' => 'イラスト・絵', 'sort_order' => 3],
+                        ['name' => '日記', 'description' => '日記・ブログ', 'sort_order' => 8]
                     ]
                 ],
                 [
@@ -148,29 +161,36 @@ class Database {
                     'sort_order' => 2,
                     'children' => [
                         ['name' => '全年齢', 'description' => '全年齢対象', 'sort_order' => 1],
-                        ['name' => '成人向け', 'description' => '18禁・成人向け', 'sort_order' => 2]
+                        ['name' => '成人向け', 'description' => '18禁・成人向け', 'sort_order' => 2],
                     ]
                 ],
                 [
-                    'name' => '作品名',
+                    'name' => '作品・ジャンル',
                     'description' => '取り扱い作品・ジャンル',
                     'sort_order' => 3,
                     'children' => [
-                        ['name' => 'AAA', 'description' => 'AAAシリーズ', 'sort_order' => 1],
-                        ['name' => 'BBB', 'description' => 'BBBシリーズ', 'sort_order' => 2]
+                        ['name' => '国内ドラマ', 'description' => 'BL・やおい', 'sort_order' => 1],
+                        ['name' => '海外ドラマ', 'description' => 'GL・百合', 'sort_order' => 2],
+                        ['name' => '特撮', 'description' => 'NL・ノーマル', 'sort_order' => 3],
+                        ['name' => 'その他半ナマ系', 'description' => 'GL・百合', 'sort_order' => 4],
+                        ['name' => '俳優', 'description' => 'GL・百合', 'sort_order' => 5],
+                        ['name' => '配信者・VTuber', 'description' => 'GL・百合', 'sort_order' => 6],
+                        ['name' => 'お笑い芸人', 'description' => 'GL・百合', 'sort_order' => 7],
+                        ['name' => 'その他ナマモノ系', 'description' => 'GL・百合', 'sort_order' => 8],
                     ]
                 ],
                 [
-                    'name' => '備考',
+                    'name' => '特徴・備考',
                     'description' => 'サイトの特徴・備考',
                     'sort_order' => 4,
                     'children' => [
-                        ['name' => '雑多', 'description' => '雑多・複数ジャンル', 'sort_order' => 4],
-                        ['name' => 'オフライン活動', 'description' => 'オフライン・イベント活動', 'sort_order' => 6],
-                        ['name' => 'URL請求制', 'description' => 'URL請求制', 'sort_order' => 14],
-                        ['name' => 'パスワード制', 'description' => 'パスワード制', 'sort_order' => 15],
-                        ['name' => '一部パスワード制', 'description' => '一部パスワード制', 'sort_order' => 16],
-                        ]
+                        ['name' => 'よろずサイト', 'description' => '雑多・複数ジャンル', 'sort_order' => 1],
+                        ['name' => 'オフライン活動', 'description' => 'オフライン・イベント活動', 'sort_order' => 4],
+                        ['name' => 'URL請求制', 'description' => 'URL請求制', 'sort_order' => 5],
+                        ['name' => 'パスワード制', 'description' => 'パスワード制', 'sort_order' => 6],
+                        ['name' => '一部パスワード制', 'description' => '一部パスワード制', 'sort_order' => 7],
+                        ['name' => 'モバイル対応', 'description' => 'モバイル・スマホ対応', 'sort_order' => 13],
+                    ]
                 ]
             ];
             

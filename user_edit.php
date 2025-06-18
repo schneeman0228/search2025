@@ -16,6 +16,9 @@ if (!$site) {
     exit;
 }
 
+// 現在のカテゴリIDを取得
+$current_category_ids = array_column($site['categories'], 'id');
+
 // フォーム送信処理
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $csrf_token = $_POST['csrf_token'] ?? '';
@@ -28,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $title = trim($_POST['title'] ?? '');
         $url = trim($_POST['url'] ?? '');
         $description = trim($_POST['description'] ?? '');
-        $category_id = (int)($_POST['category_id'] ?? 0);
+        $category_ids = isset($_POST['category_ids']) && is_array($_POST['category_ids']) ? array_map('intval', $_POST['category_ids']) : [];
         
         // バリデーション
         if (empty($title)) {
@@ -37,20 +40,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'URLを入力してください。';
         } elseif (!isValidUrl($url)) {
             $error = '有効なURLを入力してください。';
-        } elseif ($category_id <= 0) {
-            $error = 'カテゴリを選択してください。';
+        } elseif (empty($category_ids)) {
+            $error = '少なくとも1つのカテゴリを選択してください。';
         } elseif (strlen($title) > 100) {
             $error = 'サイト名は100文字以内で入力してください。';
         } elseif (strlen($description) > 500) {
             $error = '説明文は500文字以内で入力してください。';
         } else {
             // サイト情報更新実行
-            $result = updateUserSite($site['id'], $title, $url, $description, $category_id, $_SESSION['user_email']);
+            $result = updateUserSite($site['id'], $title, $url, $description, $category_ids, $_SESSION['user_email']);
             
             if ($result['success']) {
                 $message = $result['message'];
                 // サイト情報再取得
                 $site = getCurrentUserSite();
+                $current_category_ids = array_column($site['categories'], 'id');
             } else {
                 $error = $result['message'];
             }
@@ -83,8 +87,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// カテゴリ一覧取得
-$categories = getCategories();
+// 階層カテゴリ一覧取得
+$hierarchical_categories = getCategoriesHierarchical();
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -132,6 +136,10 @@ $categories = getCategories();
                         <span class="info-label">更新日:</span>
                         <?php echo date('Y年m月d日 H:i', strtotime($site['updated_at'])); ?>
                     </div>
+                    <div class="info-item">
+                        <span class="info-label">現在のカテゴリ:</span>
+                        <?php echo h($site['category_names']); ?>
+                    </div>
                 </div>
 
                 <form method="POST" action="">
@@ -151,20 +159,50 @@ $categories = getCategories();
                     </div>
 
                     <div class="form-group">
-                        <label for="category_id">カテゴリ <span class="required">*</span></label>
-                        <select id="category_id" name="category_id" required>
-                            <?php foreach ($categories as $category): ?>
-                                <option value="<?php echo $category['id']; ?>" <?php echo $category['id'] == $site['category_id'] ? 'selected' : ''; ?>>
-                                    <?php echo h($category['name']); ?>
-                                </option>
+                        <label>カテゴリ <span class="required">*</span></label>
+                        <div class="help-text" style="margin-bottom: 15px;">該当するカテゴリを複数選択できます。サイトの特徴に合うものをすべて選択してください。</div>
+                        
+                        <div class="category-selection">
+                            <?php foreach ($hierarchical_categories as $parent): ?>
+                                <div class="category-group-selection">
+                                    <div class="category-parent-header">
+                                        <h4><?php echo h($parent['name']); ?></h4>
+                                        <p class="category-parent-desc"><?php echo h($parent['description']); ?></p>
+                                    </div>
+                                    
+                                    <?php if (!empty($parent['children'])): ?>
+                                        <div class="category-children-selection">
+                                            <?php foreach ($parent['children'] as $child): ?>
+                                                <label class="category-checkbox">
+                                                    <input type="checkbox" 
+                                                           name="category_ids[]" 
+                                                           value="<?php echo $child['id']; ?>"
+                                                           <?php echo in_array($child['id'], $current_category_ids) ? 'checked' : ''; ?>>
+                                                    <span class="checkbox-label">
+                                                        <strong><?php echo h($child['name']); ?></strong>
+                                                        <?php if ($child['description']): ?>
+                                                            <small><?php echo h($child['description']); ?></small>
+                                                        <?php endif; ?>
+                                                    </span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
                             <?php endforeach; ?>
-                        </select>
+                        </div>
                     </div>
 
                     <div class="form-group">
                         <label for="description">サイト説明</label>
                         <textarea id="description" name="description" maxlength="500" placeholder="サイトの内容について簡潔に説明してください"><?php echo h($site['description']); ?></textarea>
                         <div class="help-text">500文字以内で入力してください（任意）</div>
+                    </div>
+
+                    <!-- 選択されたカテゴリの表示 -->
+                    <div class="selected-categories" id="selected-categories">
+                        <h4>選択中のカテゴリ</h4>
+                        <div id="selected-list"></div>
                     </div>
 
                     <button type="submit" class="btn btn-primary">サイト情報を更新</button>
@@ -262,6 +300,36 @@ $categories = getCategories();
                 helpText.style.color = '#666';
             }
         });
+
+        // 選択されたカテゴリの表示更新
+        function updateSelectedCategories() {
+            const checkboxes = document.querySelectorAll('input[name="category_ids[]"]:checked');
+            const selectedDiv = document.getElementById('selected-categories');
+            const listDiv = document.getElementById('selected-list');
+            
+            if (checkboxes.length > 0) {
+                selectedDiv.style.display = 'block';
+                let html = '';
+                
+                checkboxes.forEach(function(checkbox) {
+                    const label = checkbox.parentNode.querySelector('.checkbox-label strong').textContent;
+                    const parentGroup = checkbox.closest('.category-group-selection').querySelector('h4').textContent;
+                    html += '<span class="selected-tag">' + parentGroup + ' > ' + label + '</span>';
+                });
+                
+                listDiv.innerHTML = html;
+            } else {
+                selectedDiv.style.display = 'none';
+            }
+        }
+
+        // カテゴリチェックボックスの変更を監視
+        document.querySelectorAll('input[name="category_ids[]"]').forEach(function(checkbox) {
+            checkbox.addEventListener('change', updateSelectedCategories);
+        });
+
+        // 初期表示時の選択状態を反映
+        updateSelectedCategories();
     </script>
 </body>
 </html>

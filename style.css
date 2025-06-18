@@ -1355,3 +1355,615 @@ body {
     }
     
 }
+
+
+
+/* ====================================================================
+   複数カテゴリ対応用 CSS追加
+   ==================================================================== */
+
+/* ====================================================================
+   検索・フィルタ関連
+   ==================================================================== */
+
+/* 検索・フィルタボックス */
+.search-filter-box {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    padding: 25px;
+    margin-bottom: 30px;
+}
+
+.search-row {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.search-row input[type="text"] {
+    flex: 1;
+    min-width: 250px;
+    padding: 12px 16px;
+    border: 2px solid #ddd;
+    border-radius: 25px;
+    font-size: 16px;
+    transition: border-color 0.3s;
+}
+
+.search-row input[type="text"]:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.search-row input[type="submit"] {
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: transform 0.2s;
+}
+
+.search-row input[type="submit"]:hover {
+    transform: translateY(-2px);
+}
+
+.clear-button {
+    padding: 12px 20px;
+    background: #6c757d;
+    color: white;
+    text-decoration: none;
+    border-radius: 25px;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+
+.clear-button:hover {
+    background: #545b62;
+}
+
+/* カテゴリフィルタコンテナ */
+.category-filter-container {
+    margin-top: 15px;
+}
+
+.filter-toggle {
+    background: #f8f9fa;
+    border: 2px solid #dee2e6;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+    transition: all 0.3s;
+}
+
+.filter-toggle:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.filter-count {
+    background: #007cba;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    margin-left: 10px;
+}
+
+.category-filter {
+    background: #f8f9fa;
+    border: 2px solid #dee2e6;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.filter-group {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.filter-parent {
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #007cba;
+}
+
+.filter-children {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.filter-checkbox:hover {
+    background: #f8f9fa;
+}
+
+.filter-checkbox input[type="checkbox"] {
+    margin-right: 8px;
+    transform: scale(1.1);
+}
+
+.filter-checkbox span {
+    font-size: 14px;
+    color: #555;
+}
+
+/* 現在の絞り込み条件 */
+.current-filters {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.current-filters h4 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 16px;
+}
+
+.filter-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.filter-tag {
+    background: #e9ecef;
+    color: #495057;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filter-tag.search-tag {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.filter-tag.category-tag {
+    background: #d4edda;
+    color: #155724;
+}
+
+.remove-filter {
+    background: #dc3545;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+.remove-filter:hover {
+    background: #c82333;
+}
+
+/* ====================================================================
+   カテゴリ選択関連（登録・編集フォーム）
+   ==================================================================== */
+
+/* カテゴリ選択コンテナ */
+.category-selection {
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    background: #f8f9fa;
+}
+
+.category-group-selection {
+    background: white;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.category-group-selection:last-child {
+    margin-bottom: 0;
+}
+
+.category-parent-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 15px 20px;
+}
+
+.category-parent-header h4 {
+    margin: 0 0 5px 0;
+    font-size: 16px;
+}
+
+.category-parent-desc {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.category-children-selection {
+    padding: 15px 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+}
+
+.category-checkbox {
+    display: flex;
+    align-items: flex-start;
+    padding: 12px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+    background: white;
+}
+
+.category-checkbox:hover {
+    border-color: #007cba;
+    background: #f8f9fa;
+}
+
+.category-checkbox input[type="checkbox"] {
+    margin-right: 12px;
+    margin-top: 2px;
+    transform: scale(1.2);
+}
+
+.category-checkbox input[type="checkbox"]:checked + .checkbox-label {
+    color: #007cba;
+    font-weight: bold;
+}
+
+.checkbox-label {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.checkbox-label strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #333;
+}
+
+.checkbox-label small {
+    color: #666;
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+/* 選択されたカテゴリ表示 */
+.selected-categories {
+    background: #e7f3ff;
+    border: 1px solid #b3d9ff;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 20px 0;
+}
+
+.selected-categories h4 {
+    margin: 0 0 10px 0;
+    color: #0056b3;
+}
+
+#selected-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.selected-tag {
+    background: #007cba;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+/* ====================================================================
+   サイト表示関連
+   ==================================================================== */
+
+/* サイト項目のカテゴリ表示 */
+.site-categories {
+    margin-bottom: 8px;
+}
+
+.category-link {
+    color: #007cba;
+    text-decoration: none;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+
+.category-link:hover {
+    background: #e7f3ff;
+    text-decoration: none;
+}
+
+.site-date {
+    font-size: 0.85em;
+    color: #999;
+}
+
+/* ====================================================================
+   管理画面関連
+   ==================================================================== */
+
+/* カテゴリ表示バッジ */
+.categories-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-width: 300px;
+}
+
+.category-badge {
+    background: #e9ecef;
+    color: #495057;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/* 管理画面用カテゴリ選択 */
+.category-selection-admin {
+    border: 2px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    background: #f8f9fa;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.category-group-admin {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.category-group-admin:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.category-group-admin strong {
+    display: block;
+    margin-bottom: 10px;
+    color: #333;
+    font-size: 14px;
+}
+
+.category-children-admin {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+}
+
+.category-checkbox-admin {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.3s;
+}
+
+.category-checkbox-admin:hover {
+    background: #e9ecef;
+}
+
+.category-checkbox-admin input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+/* カテゴリフィルタドロップダウン（管理画面） */
+.category-filter-dropdown {
+    position: relative;
+}
+
+.category-filter-dropdown summary {
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #495057;
+}
+
+.category-filter-dropdown summary:hover {
+    background: #e9ecef;
+}
+
+.filter-content {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    padding: 15px;
+    z-index: 1000;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.filter-group-admin {
+    margin-bottom: 15px;
+}
+
+.filter-parent-admin {
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.filter-children-admin {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 6px;
+}
+
+.filter-checkbox-admin {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+
+.filter-checkbox-admin:hover {
+    background: #f8f9fa;
+}
+
+.filter-checkbox-admin input[type="checkbox"] {
+    margin-right: 6px;
+}
+
+/* ====================================================================
+   ダッシュボード関連
+   ==================================================================== */
+
+/* ダッシュボードのカテゴリ表示 */
+.categories-display-dashboard {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.category-badge-dashboard {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.category-summary {
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+}
+
+/* ====================================================================
+   レスポンシブ対応（複数カテゴリ用）
+   ==================================================================== */
+
+@media (max-width: 768px) {
+    .search-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-row input[type="text"] {
+        min-width: auto;
+        margin-bottom: 10px;
+    }
+
+    .category-filter {
+        grid-template-columns: 1fr;
+    }
+
+    .category-children-selection {
+        grid-template-columns: 1fr;
+    }
+
+    .category-children-admin {
+        grid-template-columns: 1fr;
+    }
+
+    .filter-children-admin {
+        grid-template-columns: 1fr;
+    }
+
+    .categories-display {
+        max-width: none;
+    }
+
+    .categories-display-dashboard {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .filter-tags {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .filter-content {
+        position: static;
+        max-height: 300px;
+    }
+}
+
+@media (max-width: 480px) {
+    .category-checkbox {
+        padding: 10px;
+    }
+
+    .checkbox-label strong {
+        font-size: 14px;
+    }
+
+    .checkbox-label small {
+        font-size: 11px;
+    }
+
+    .category-badge-dashboard {
+        font-size: 12px;
+        padding: 3px 10px;
+    }
+
+    .search-filter-box {
+        padding: 20px 15px;
+    }
+}

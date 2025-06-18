@@ -44,13 +44,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <div class="info-box">
-            <strong>ログインについて</strong>
+            <strong>ログインについて</strong><br>
             サイト登録時に設定したメールアドレスとパスワードでログインしてください。
             ログイン後、サイト情報の編集が可能になります（承認不要）。
         </div>
 
         <?php if ($error): ?>
-            <div class="error-message"><?php echo h($error); ?></div>
+            <div class="message error"><?php echo h($error); ?></div>
         <?php endif; ?>
 
         <form method="POST" action="">

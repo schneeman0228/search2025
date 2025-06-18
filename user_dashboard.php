@@ -81,7 +81,28 @@ if (!$site) {
                 
                 <div class="info-row">
                     <div class="info-label">カテゴリ</div>
-                    <div class="info-value"><?php echo h($site['category_name']); ?></div>
+                    <div class="info-value">
+                        <?php if (!empty($site['categories'])): ?>
+                            <div class="categories-display-dashboard">
+                                <?php foreach ($site['categories'] as $cat): ?>
+                                    <span class="category-badge-dashboard">
+                                        <?php 
+                                        if ($cat['parent_name']) {
+                                            echo h($cat['parent_name'] . ' > ' . $cat['name']);
+                                        } else {
+                                            echo h($cat['name']);
+                                        }
+                                        ?>
+                                    </span>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="category-summary">
+                                合計 <?php echo count($site['categories']); ?> カテゴリ
+                            </div>
+                        <?php else: ?>
+                            <span style="color: #999;">（カテゴリ未設定）</span>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 
                 <div class="info-row">
@@ -97,6 +118,11 @@ if (!$site) {
                         <span class="status-badge status-<?php echo $site['status']; ?>">
                             <?php echo $site['status'] === 'approved' ? '公開中' : '承認待ち'; ?>
                         </span>
+                        <?php if ($site['status'] === 'approved'): ?>
+                            <small style="color: #28a745; margin-left: 10px;">
+                                サイト一覧に表示されています
+                            </small>
+                        <?php endif; ?>
                     </div>
                 </div>
                 
@@ -115,6 +141,16 @@ if (!$site) {
                     <div class="info-value"><?php echo h($site['email']); ?></div>
                 </div>
             </div>
+        </div>
+
+        <div class="note-box">
+            <h4>🎯 複数カテゴリ対応について</h4>
+            <ul>
+                <li><strong>複数選択可能</strong>：コンテンツ、年齢制限、作品・ジャンル、特徴・備考から自由に選択</li>
+                <li><strong>検索性向上</strong>：選択したカテゴリすべてで検索対象になります</li>
+                <li><strong>即座に反映</strong>：カテゴリ変更は承認不要で即座に反映されます</li>
+                <li><strong>例</strong>：「漫画 + 全年齢 + オリジナル + 交流」のような組み合わせが可能</li>
+            </ul>
         </div>
 
         <div class="note-box">

@@ -44,6 +44,19 @@ function getSiteCount($status = 'approved') {
     return $result['count'];
 }
 
+// カテゴリ一覧を取得
+function getCategories($parent_id = null) {
+    global $db;
+    $sql = "SELECT * FROM categories WHERE " . ($parent_id ? "parent_id = ?" : "parent_id IS NULL") . " ORDER BY sort_order, name";
+    $stmt = $db->prepare($sql);
+    if ($parent_id) {
+        $stmt->execute([$parent_id]);
+    } else {
+        $stmt->execute();
+    }
+    return $stmt->fetchAll();
+}
+
 // 階層構造でカテゴリを取得
 function getCategoriesHierarchical() {
     global $db;
@@ -70,27 +83,6 @@ function getCategoriesHierarchical() {
     return $hierarchy;
 }
 
-// カテゴリパスを取得（パンくずナビ用）
-function getCategoryPath($category_id) {
-    global $db;
-    
-    $path = [];
-    $current_id = $category_id;
-    
-    while ($current_id) {
-        $stmt = $db->prepare("SELECT id, name, parent_id FROM categories WHERE id = ?");
-        $stmt->execute([$current_id]);
-        $category = $stmt->fetch();
-        
-        if (!$category) break;
-        
-        array_unshift($path, $category);
-        $current_id = $category['parent_id'];
-    }
-    
-    return $path;
-}
-
 // カテゴリセレクトボックス用の階層リストを生成
 function getCategoriesForSelect() {
     global $db;
@@ -111,7 +103,8 @@ function getCategoriesForSelect() {
                     'id' => $child['id'],
                     'name' => $parent['name'] . ' > ' . $child['name'],
                     'parent_name' => $parent['name'],
-                    'child_name' => $child['name']
+                    'child_name' => $child['name'],
+                    'parent_id' => $parent['id']
                 ];
             }
         } else {
@@ -120,62 +113,13 @@ function getCategoriesForSelect() {
                 'id' => $parent['id'],
                 'name' => $parent['name'],
                 'parent_name' => '',
-                'child_name' => $parent['name']
+                'child_name' => $parent['name'],
+                'parent_id' => null
             ];
         }
     }
     
     return $categories;
-}
-
-// 階層カテゴリ表示HTML生成
-function generateHierarchicalCategoryHTML($categories) {
-    $html = '<div class="categories-hierarchical">';
-    
-    foreach ($categories as $parent) {
-        $html .= '<div class="category-group">';
-        $html .= '<div class="category-parent">';
-        $html .= '<h3>' . h($parent['name']) . '</h3>';
-        if ($parent['description']) {
-            $html .= '<p class="category-description">' . h($parent['description']) . '</p>';
-        }
-        $html .= '<span class="total-count">(' . $parent['total_sites'] . '件)</span>';
-        $html .= '</div>';
-        
-        if (!empty($parent['children'])) {
-            $html .= '<div class="category-children">';
-            foreach ($parent['children'] as $child) {
-                $html .= '<div class="category-child">';
-                $html .= '<a href="?category=' . $child['id'] . '">';
-                $html .= '<span class="child-name">' . h($child['name']) . '</span>';
-                $html .= '<span class="child-count">(' . $child['site_count'] . ')</span>';
-                $html .= '</a>';
-                if ($child['description']) {
-                    $html .= '<div class="child-description">' . h($child['description']) . '</div>';
-                }
-                $html .= '</div>';
-            }
-            $html .= '</div>';
-        }
-        
-        $html .= '</div>';
-    }
-    
-    $html .= '</div>';
-    return $html;
-}
-
-// カテゴリ一覧を取得
-function getCategories($parent_id = null) {
-    global $db;
-    $sql = "SELECT * FROM categories WHERE " . ($parent_id ? "parent_id = ?" : "parent_id IS NULL") . " ORDER BY sort_order, name";
-    $stmt = $db->prepare($sql);
-    if ($parent_id) {
-        $stmt->execute([$parent_id]);
-    } else {
-        $stmt->execute();
-    }
-    return $stmt->fetchAll();
 }
 
 // カテゴリ情報を取得
@@ -189,34 +133,80 @@ function getCategory($id) {
 // カテゴリ内のサイト数を取得
 function getCategorySiteCount($category_id) {
     global $db;
-    $stmt = $db->prepare("SELECT COUNT(*) as count FROM sites WHERE category_id = ? AND status = 'approved'");
+    $stmt = $db->prepare("
+        SELECT COUNT(DISTINCT s.id) as count 
+        FROM sites s 
+        JOIN site_categories sc ON s.id = sc.site_id 
+        WHERE sc.category_id = ? AND s.status = 'approved'
+    ");
     $stmt->execute([$category_id]);
     $result = $stmt->fetch();
     return $result['count'];
 }
 
-// サイト一覧を取得
-function getSites($category_id = null, $search = null, $page = 1, $limit = 20, $status = 'approved') {
+// サイトのカテゴリを取得
+function getSiteCategories($site_id) {
+    global $db;
+    $stmt = $db->prepare("
+        SELECT c.id, c.name, c.parent_id, pc.name as parent_name
+        FROM categories c
+        JOIN site_categories sc ON c.id = sc.category_id
+        LEFT JOIN categories pc ON c.parent_id = pc.id
+        WHERE sc.site_id = ?
+        ORDER BY pc.sort_order, c.sort_order
+    ");
+    $stmt->execute([$site_id]);
+    return $stmt->fetchAll();
+}
+
+// サイトのカテゴリを更新（トランザクション管理は呼び出し元で行う）
+function updateSiteCategories($site_id, $category_ids) {
+    global $db;
+    
+    try {
+        // 既存のカテゴリ関連を削除
+        $stmt = $db->prepare("DELETE FROM site_categories WHERE site_id = ?");
+        $stmt->execute([$site_id]);
+        
+        // 新しいカテゴリ関連を挿入
+        if (!empty($category_ids)) {
+            $stmt = $db->prepare("INSERT INTO site_categories (site_id, category_id) VALUES (?, ?)");
+            foreach ($category_ids as $category_id) {
+                $stmt->execute([$site_id, (int)$category_id]);
+            }
+        }
+        
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+// サイト一覧を取得（複数カテゴリ対応）
+function getSites($category_ids = null, $search = null, $page = 1, $limit = 20, $status = 'approved') {
     global $db;
     
     $offset = ($page - 1) * $limit;
-    $conditions = ["status = ?"];
+    $conditions = ["s.status = ?"];
     $params = [$status];
+    $joins = "";
     
-    if ($category_id) {
-        $conditions[] = "category_id = ?";
-        $params[] = $category_id;
+    if ($category_ids && !empty($category_ids)) {
+        $placeholders = str_repeat('?,', count($category_ids) - 1) . '?';
+        $joins .= " JOIN site_categories sc ON s.id = sc.site_id";
+        $conditions[] = "sc.category_id IN ($placeholders)";
+        $params = array_merge($params, $category_ids);
     }
     
     if ($search) {
-        $conditions[] = "(title LIKE ? OR description LIKE ?)";
+        $conditions[] = "(s.title LIKE ? OR s.description LIKE ?)";
         $params[] = "%{$search}%";
         $params[] = "%{$search}%";
     }
     
-    $sql = "SELECT s.*, c.name as category_name 
+    $sql = "SELECT DISTINCT s.* 
             FROM sites s 
-            JOIN categories c ON s.category_id = c.id 
+            {$joins}
             WHERE " . implode(' AND ', $conditions) . " 
             ORDER BY s.updated_at DESC 
             LIMIT ? OFFSET ?";
@@ -226,28 +216,49 @@ function getSites($category_id = null, $search = null, $page = 1, $limit = 20, $
     
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
-    return $stmt->fetchAll();
+    $sites = $stmt->fetchAll();
+    
+    // 各サイトのカテゴリ情報を追加
+    foreach ($sites as &$site) {
+        $site['categories'] = getSiteCategories($site['id']);
+        
+        // 表示用のカテゴリ名文字列を生成
+        $category_names = [];
+        foreach ($site['categories'] as $cat) {
+            if ($cat['parent_name']) {
+                $category_names[] = $cat['parent_name'] . ' > ' . $cat['name'];
+            } else {
+                $category_names[] = $cat['name'];
+            }
+        }
+        $site['category_names'] = implode(', ', $category_names);
+    }
+    
+    return $sites;
 }
 
 // サイト総数を取得（検索・フィルタ条件付き）
-function getSitesCount($category_id = null, $search = null, $status = 'approved') {
+function getSitesCount($category_ids = null, $search = null, $status = 'approved') {
     global $db;
     
-    $conditions = ["status = ?"];
+    $conditions = ["s.status = ?"];
     $params = [$status];
+    $joins = "";
     
-    if ($category_id) {
-        $conditions[] = "category_id = ?";
-        $params[] = $category_id;
+    if ($category_ids && !empty($category_ids)) {
+        $placeholders = str_repeat('?,', count($category_ids) - 1) . '?';
+        $joins .= " JOIN site_categories sc ON s.id = sc.site_id";
+        $conditions[] = "sc.category_id IN ($placeholders)";
+        $params = array_merge($params, $category_ids);
     }
     
     if ($search) {
-        $conditions[] = "(title LIKE ? OR description LIKE ?)";
+        $conditions[] = "(s.title LIKE ? OR s.description LIKE ?)";
         $params[] = "%{$search}%";
         $params[] = "%{$search}%";
     }
     
-    $sql = "SELECT COUNT(*) as count FROM sites WHERE " . implode(' AND ', $conditions);
+    $sql = "SELECT COUNT(DISTINCT s.id) as count FROM sites s {$joins} WHERE " . implode(' AND ', $conditions);
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
     $result = $stmt->fetch();
@@ -362,18 +373,31 @@ function getCurrentUserSite() {
         return null;
     }
     
-    $stmt = $db->prepare("
-        SELECT s.*, c.name as category_name 
-        FROM sites s 
-        JOIN categories c ON s.category_id = c.id 
-        WHERE s.id = ?
-    ");
+    $stmt = $db->prepare("SELECT * FROM sites WHERE id = ?");
     $stmt->execute([$_SESSION['user_site_id']]);
-    return $stmt->fetch();
+    $site = $stmt->fetch();
+    
+    if ($site) {
+        // カテゴリ情報を追加
+        $site['categories'] = getSiteCategories($site['id']);
+        
+        // 表示用のカテゴリ名文字列を生成
+        $category_names = [];
+        foreach ($site['categories'] as $cat) {
+            if ($cat['parent_name']) {
+                $category_names[] = $cat['parent_name'] . ' > ' . $cat['name'];
+            } else {
+                $category_names[] = $cat['name'];
+            }
+        }
+        $site['category_names'] = implode(', ', $category_names);
+    }
+    
+    return $site;
 }
 
 // サイト情報更新（ユーザー）
-function updateUserSite($site_id, $title, $url, $description, $category_id, $user_email) {
+function updateUserSite($site_id, $title, $url, $description, $category_ids, $user_email) {
     global $db;
     
     // 権限チェック
@@ -394,15 +418,33 @@ function updateUserSite($site_id, $title, $url, $description, $category_id, $use
         return ['success' => false, 'message' => 'このURLは既に他のサイトで使用されています。'];
     }
     
+    // カテゴリが選択されているかチェック
+    if (empty($category_ids)) {
+        return ['success' => false, 'message' => '少なくとも1つのカテゴリを選択してください。'];
+    }
+    
     try {
+        $db->beginTransaction();
+        
+        // サイト情報更新
         $stmt = $db->prepare("
             UPDATE sites 
-            SET title = ?, url = ?, description = ?, category_id = ?, updated_at = datetime('now') 
+            SET title = ?, url = ?, description = ?, updated_at = datetime('now') 
             WHERE id = ? AND email = ?
         ");
-        $stmt->execute([$title, $url, $description, $category_id, $site_id, $user_email]);
+        $stmt->execute([$title, $url, $description, $site_id, $user_email]);
+        
+        // カテゴリ更新
+        if (!updateSiteCategories($site_id, $category_ids)) {
+            throw new Exception('カテゴリの更新に失敗しました。');
+        }
+        
+        $db->commit();
         return ['success' => true, 'message' => 'サイト情報を更新しました。'];
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollback();
+        }
         return ['success' => false, 'message' => 'データベースエラーが発生しました。'];
     }
 }
@@ -440,8 +482,8 @@ function isValidEmail($email) {
     return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
 }
 
-// サイト登録（修正版：メール重複OK、パスワード簡素化）
-function registerSiteWithUser($title, $url, $description, $category_id, $email, $password, $ip_address) {
+// サイト登録（複数カテゴリ対応）
+function registerSiteWithUser($title, $url, $description, $category_ids, $email, $password, $ip_address) {
     global $db;
     
     // URL重複チェック
@@ -453,6 +495,11 @@ function registerSiteWithUser($title, $url, $description, $category_id, $email, 
         return ['success' => false, 'message' => 'このURLは既に登録されています。'];
     }
     
+    // カテゴリが選択されているかチェック
+    if (empty($category_ids)) {
+        return ['success' => false, 'message' => '少なくとも1つのカテゴリを選択してください。'];
+    }
+    
     // サイト数上限チェック
     $totalSites = getSiteCount('approved') + getSiteCount('pending');
     global $MAX_SITES;
@@ -461,18 +508,91 @@ function registerSiteWithUser($title, $url, $description, $category_id, $email, 
     }
     
     try {
+        $db->beginTransaction();
+        
+        // サイト登録
         $password_hash = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = $db->prepare("INSERT INTO sites (title, url, description, category_id, email, password_hash, ip_address, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')");
-        $stmt->execute([$title, $url, $description, $category_id, $email, $password_hash, $ip_address]);
+        $stmt = $db->prepare("INSERT INTO sites (title, url, description, email, password_hash, ip_address, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')");
+        $stmt->execute([$title, $url, $description, $email, $password_hash, $ip_address]);
+        $site_id = $db->lastInsertId();
+        
+        // カテゴリ関連付け
+        if (!updateSiteCategories($site_id, $category_ids)) {
+            throw new Exception('カテゴリの関連付けに失敗しました。');
+        }
+        
+        $db->commit();
         return ['success' => true, 'message' => 'サイトを登録しました。管理者の承認をお待ちください。'];
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollback();
+        }
         return ['success' => false, 'message' => 'データベースエラーが発生しました。'];
     }
 }
 
-// 下位互換のため旧関数名も残す（必要に応じて削除）
-function registerSite($title, $url, $description, $category_id, $ip_address) {
-    // 旧形式での呼び出しの場合はエラーを返す
-    return ['success' => false, 'message' => 'この関数は廃止されました。registerSiteWithUserを使用してください。'];
+// 階層カテゴリ表示HTML生成（複数カテゴリ対応）
+function generateHierarchicalCategoryHTML($categories) {
+    $html = '<div class="categories-hierarchical">';
+    
+    foreach ($categories as $parent) {
+        $html .= '<div class="category-group">';
+        $html .= '<div class="category-parent">';
+        $html .= '<h3>' . h($parent['name']) . '</h3>';
+        if ($parent['description']) {
+            $html .= '<p class="category-description">' . h($parent['description']) . '</p>';
+        }
+        $html .= '<span class="total-count">(' . $parent['total_sites'] . '件)</span>';
+        $html .= '</div>';
+        
+        if (!empty($parent['children'])) {
+            $html .= '<div class="category-children">';
+            foreach ($parent['children'] as $child) {
+                $html .= '<div class="category-child">';
+                $html .= '<a href="?categories[]=' . $child['id'] . '">';
+                $html .= '<span class="child-name">' . h($child['name']) . '</span>';
+                $html .= '<span class="child-count">(' . $child['site_count'] . ')</span>';
+                $html .= '</a>';
+                if ($child['description']) {
+                    $html .= '<div class="child-description">' . h($child['description']) . '</div>';
+                }
+                $html .= '</div>';
+            }
+            $html .= '</div>';
+        }
+        
+        $html .= '</div>';
+    }
+    
+    $html .= '</div>';
+    return $html;
+}
+
+// カテゴリフィルタ用チェックボックスHTML生成
+function generateCategoryFilterHTML($hierarchical_categories, $selected_categories = []) {
+    $html = '<div class="category-filter">';
+    $html .= '<h4>カテゴリで絞り込み</h4>';
+    
+    foreach ($hierarchical_categories as $parent) {
+        $html .= '<div class="filter-group">';
+        $html .= '<div class="filter-parent">' . h($parent['name']) . '</div>';
+        
+        if (!empty($parent['children'])) {
+            $html .= '<div class="filter-children">';
+            foreach ($parent['children'] as $child) {
+                $checked = in_array($child['id'], $selected_categories) ? 'checked' : '';
+                $html .= '<label class="filter-checkbox">';
+                $html .= '<input type="checkbox" name="categories[]" value="' . $child['id'] . '" ' . $checked . '>';
+                $html .= '<span>' . h($child['name']) . ' (' . $child['site_count'] . ')</span>';
+                $html .= '</label>';
+            }
+            $html .= '</div>';
+        }
+        
+        $html .= '</div>';
+    }
+    
+    $html .= '</div>';
+    return $html;
 }
 ?>
