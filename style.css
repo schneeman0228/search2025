@@ -2,6 +2,210 @@
    ディレクトリサーチ 統合スタイルシート
    ==================================================================== */
 
+   /* 個別サイト管理リンク用のスタイル */
+        .site-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+            gap: 15px;
+        }
+        
+        .site-title {
+            flex: 1;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .site-manage-link {
+            flex-shrink: 0;
+        }
+        
+        .manage-link {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-block;
+            transition: all 0.3s;
+            box-shadow: 0 2px 5px rgba(102, 126, 234, 0.3);
+        }
+        
+        .manage-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.4);
+            text-decoration: none;
+            color: white;
+        }
+        
+        .manage-link:active {
+            transform: translateY(0);
+        }
+        
+        /* レスポンシブ対応 */
+        @media (max-width: 768px) {
+            .site-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .site-manage-link {
+                align-self: flex-end;
+            }
+            
+            .manage-link {
+                padding: 8px 16px;
+                font-size: 13px;
+            }
+        }
+        
+        /* 案内ボックスのスタイル */
+        .info-box {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .info-box h4 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .info-box ul {
+            margin-bottom: 0;
+        }
+        
+        .info-box li {
+            margin-bottom: 5px;
+        }
+        
+    /* 個別サイト管理画面専用のスタイル */
+        .site-url {
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        
+        .site-url a {
+            color: #28a745;
+            text-decoration: none;
+        }
+        
+        .site-url a:hover {
+            text-decoration: underline;
+        }
+        
+        .site-categories {
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        
+        .site-dates {
+            margin-top: 15px;
+            color: #666;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .action-buttons {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+   /* 個別サイトログイン専用のスタイル */
+        .site-info-box {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .site-preview {
+            text-align: center;
+        }
+        
+        .site-title-preview {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .site-url-preview {
+            margin-bottom: 10px;
+        }
+        
+        .site-url-preview a {
+            color: #28a745;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .site-url-preview a:hover {
+            text-decoration: underline;
+        }
+        
+        .site-categories-preview {
+            font-size: 13px;
+            color: #666;
+            background: white;
+            padding: 8px 12px;
+            border-radius: 15px;
+            display: inline-block;
+        }
+        
+        .security-notice {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            font-size: 13px;
+        }
+        
+        .security-notice h4 {
+            margin-top: 0;
+            font-size: 14px;
+        }
+        
+        .security-notice ul {
+            margin-bottom: 0;
+            padding-left: 18px;
+        }
+        
+        .security-notice li {
+            margin-bottom: 5px;
+        }
+        
+        .login-button {
+            font-size: 14px;
+            word-break: break-all;
+            line-height: 1.3;
+            padding: 16px 14px;
+        }
+        
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 3px;
+        }
+
 /* ====================================================================
    ベーススタイル
    ==================================================================== */

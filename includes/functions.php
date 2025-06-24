@@ -1,4 +1,249 @@
 <?php
+
+// ========================================
+// 個別サイト管理用認証関連の関数（修正版）
+// ========================================
+
+// 個別サイトログイン状態確認
+function isSiteLoggedIn($site_id = null) {
+    // セッションが開始されていない場合は開始
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    
+    if (!isset($_SESSION['site_logged_in']) || $_SESSION['site_logged_in'] !== true) {
+        return false;
+    }
+    
+    // 特定のサイトIDが指定されている場合は、そのサイトでログインしているかチェック
+    if ($site_id !== null) {
+        return isset($_SESSION['site_management_id']) && $_SESSION['site_management_id'] == $site_id;
+    }
+    
+    return true;
+}
+
+// 個別サイトログイン要求
+function requireSiteLogin($site_id) {
+    if (!isSiteLoggedIn($site_id)) {
+        header("Location: site_login.php?site_id=" . urlencode($site_id));
+        exit;
+    }
+}
+
+// 個別サイト認証（指定されたサイトIDのメール・パスワードでのみログイン可能）
+function authenticateSiteUser($site_id, $email, $password) {
+    global $db;
+    
+    try {
+        // 指定されたサイトIDの情報を取得（statusの制限を削除してテスト）
+        $stmt = $db->prepare("SELECT * FROM sites WHERE id = ? AND email = ?");
+        $stmt->execute([$site_id, $email]);
+        $site = $stmt->fetch();
+        
+        if ($site && password_verify($password, $site['password_hash'])) {
+            // セッションが開始されていない場合は開始
+            if (session_status() === PHP_SESSION_NONE) {
+                session_start();
+            }
+            
+            $_SESSION['site_logged_in'] = true;
+            $_SESSION['site_management_id'] = $site['id'];
+            $_SESSION['site_management_email'] = $site['email'];
+            $_SESSION['site_management_title'] = $site['title'];
+            return true;
+        }
+        
+        return false;
+    } catch (Exception $e) {
+        error_log("authenticateSiteUser error: " . $e->getMessage());
+        return false;
+    }
+}
+
+// ログイン中の管理対象サイト情報取得
+function getCurrentManagedSite() {
+    global $db;
+    
+    if (!isSiteLoggedIn()) {
+        return null;
+    }
+    
+    try {
+        $site_id = $_SESSION['site_management_id'];
+        $stmt = $db->prepare("SELECT * FROM sites WHERE id = ?");
+        $stmt->execute([$site_id]);
+        $site = $stmt->fetch();
+        
+        if ($site) {
+            // カテゴリ情報を追加
+            $site['categories'] = getSiteCategories($site['id']);
+            
+            // 表示用のカテゴリ名文字列を生成
+            $category_names = [];
+            foreach ($site['categories'] as $cat) {
+                if ($cat['parent_name']) {
+                    $category_names[] = $cat['parent_name'] . ' > ' . $cat['name'];
+                } else {
+                    $category_names[] = $cat['name'];
+                }
+            }
+            $site['category_names'] = implode(', ', $category_names);
+        }
+        
+        return $site;
+    } catch (Exception $e) {
+        error_log("getCurrentManagedSite error: " . $e->getMessage());
+        return null;
+    }
+}
+
+// 個別サイト情報更新（管理対象サイトのみ）
+function updateManagedSite($site_id, $title, $url, $description, $category_ids) {
+    global $db;
+    
+    // 権限チェック - ログイン中のサイトと一致するかチェック
+    if (!isSiteLoggedIn($site_id)) {
+        return ['success' => false, 'message' => 'このサイトの編集権限がありません。'];
+    }
+    
+    try {
+        // URL重複チェック（自分以外）
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM sites WHERE url = ? AND id != ?");
+        $stmt->execute([$url, $site_id]);
+        $result = $stmt->fetch();
+        
+        if ($result['count'] > 0) {
+            return ['success' => false, 'message' => 'このURLは既に他のサイトで使用されています。'];
+        }
+        
+        // カテゴリが選択されているかチェック
+        if (empty($category_ids)) {
+            return ['success' => false, 'message' => '少なくとも1つのカテゴリを選択してください。'];
+        }
+        
+        $db->beginTransaction();
+        
+        // サイト情報更新
+        $stmt = $db->prepare("
+            UPDATE sites 
+            SET title = ?, url = ?, description = ?, updated_at = datetime('now') 
+            WHERE id = ?
+        ");
+        $stmt->execute([$title, $url, $description, $site_id]);
+        
+        // カテゴリ更新
+        if (!updateSiteCategories($site_id, $category_ids)) {
+            throw new Exception('カテゴリの更新に失敗しました。');
+        }
+        
+        // セッション情報も更新
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        $_SESSION['site_management_title'] = $title;
+        
+        $db->commit();
+        return ['success' => true, 'message' => 'サイト情報を更新しました。'];
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollback();
+        }
+        error_log("updateManagedSite error: " . $e->getMessage());
+        return ['success' => false, 'message' => 'データベースエラーが発生しました。'];
+    }
+}
+
+// 個別サイトのパスワード更新
+function updateManagedSitePassword($site_id, $current_password, $new_password) {
+    global $db;
+    
+    // 権限チェック
+    if (!isSiteLoggedIn($site_id)) {
+        return ['success' => false, 'message' => 'このサイトの編集権限がありません。'];
+    }
+    
+    try {
+        // 現在のパスワード確認
+        $stmt = $db->prepare("SELECT password_hash FROM sites WHERE id = ?");
+        $stmt->execute([$site_id]);
+        $site = $stmt->fetch();
+        
+        if (!$site || !password_verify($current_password, $site['password_hash'])) {
+            return ['success' => false, 'message' => '現在のパスワードが正しくありません。'];
+        }
+        
+        // 新しいパスワードの検証
+        if (!isValidPassword($new_password)) {
+            return ['success' => false, 'message' => 'パスワードは半角英数字3〜8文字で入力してください。'];
+        }
+        
+        $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
+        $stmt = $db->prepare("UPDATE sites SET password_hash = ?, updated_at = datetime('now') WHERE id = ?");
+        $stmt->execute([$new_hash, $site_id]);
+        return ['success' => true, 'message' => 'パスワードを変更しました。'];
+    } catch (Exception $e) {
+        error_log("updateManagedSitePassword error: " . $e->getMessage());
+        return ['success' => false, 'message' => 'データベースエラーが発生しました。'];
+    }
+}
+
+// サイト情報の取得（ID指定）- 修正版
+function getSiteInfo($site_id) {
+    global $db;
+    
+    try {
+        // statusの制限を削除してテスト
+        $stmt = $db->prepare("SELECT * FROM sites WHERE id = ?");
+        $stmt->execute([$site_id]);
+        $site = $stmt->fetch();
+        
+        if ($site) {
+            // カテゴリ情報を追加
+            $site['categories'] = getSiteCategories($site['id']);
+            
+            // 表示用のカテゴリ名文字列を生成
+            $category_names = [];
+            foreach ($site['categories'] as $cat) {
+                if ($cat['parent_name']) {
+                    $category_names[] = $cat['parent_name'] . ' > ' . $cat['name'];
+                } else {
+                    $category_names[] = $cat['name'];
+                }
+            }
+            $site['category_names'] = implode(', ', $category_names);
+        }
+        
+        return $site;
+    } catch (Exception $e) {
+        error_log("getSiteInfo error: " . $e->getMessage());
+        return null;
+    }
+}
+
+// 個別サイトログアウト
+function logoutSite() {
+    // セッションが開始されていない場合は開始
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    
+    unset($_SESSION['site_logged_in']);
+    unset($_SESSION['site_management_id']);
+    unset($_SESSION['site_management_email']);
+    unset($_SESSION['site_management_title']);
+}
+
+
+// ========================================
+// 既存のユーザー認証関数は将来の削除予定のため残しておく
+// ========================================
+
+// 既存のisUserLoggedIn(), requireUserLogin(), authenticateUser(), 
+// getCurrentUserSite(), updateUserSite(), updateUserPassword() 
+// などの関数はそのまま残す（後で削除予定）
+
+
 // XSS対策
 function h($str) {
     return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');

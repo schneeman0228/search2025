@@ -6,6 +6,16 @@ $search = $_GET['search'] ?? '';
 $category_ids = isset($_GET['categories']) && is_array($_GET['categories']) ? array_map('intval', $_GET['categories']) : [];
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 
+// エラーメッセージ表示
+$error_message = '';
+if (isset($_GET['error'])) {
+    switch ($_GET['error']) {
+        case 'site_not_found':
+            $error_message = '指定されたサイトが見つからないか、現在承認待ちの状態です。';
+            break;
+    }
+}
+
 // 選択されたカテゴリ情報を取得
 $selected_categories = [];
 $selected_category_names = [];
@@ -53,6 +63,11 @@ $base_url = rtrim($base_url, '&');
             <h1><a href ="index.php"><?php echo h($SITE_TITLE); ?></a></h1>
             <p><?php echo h($SITE_DESCRIPTION); ?></p>
         </div>
+
+        <!-- エラーメッセージ表示 -->
+        <?php if ($error_message): ?>
+            <div class="message error"><?php echo h($error_message); ?></div>
+        <?php endif; ?>
 
         <!-- 検索・フィルタフォーム -->
         <div class="search-filter-box">
@@ -155,10 +170,17 @@ $base_url = rtrim($base_url, '&');
             <?php else: ?>
                 <?php foreach ($sites as $site): ?>
                     <div class="site-item">
-                        <div class="site-title">
-                            <a href="<?php echo h($site['url']); ?>" target="_blank" rel="noopener">
-                                <?php echo h($site['title']); ?>
-                            </a>
+                        <div class="site-header">
+                            <div class="site-title">
+                                <a href="<?php echo h($site['url']); ?>" target="_blank" rel="noopener">
+                                    <?php echo h($site['title']); ?>
+                                </a>
+                            </div>
+                            <div class="site-manage-link">
+                                <a href="site_login.php?site_id=<?php echo $site['id']; ?>" class="manage-link">
+                                    🛠️ 管理
+                                </a>
+                            </div>
                         </div>
                         <div class="site-url"><?php echo h($site['url']); ?></div>
                         <?php if ($site['description']): ?>
@@ -186,11 +208,22 @@ $base_url = rtrim($base_url, '&');
             <?php endif; ?>
         </div>
 
-        <!-- ナビゲーションリンク -->
+        <!-- ナビゲーションリンク（サイト情報編集リンクを削除し、管理画面のみ残す） -->
         <div class="nav-links">
-            <a href="register.php">サイト登録</a>
-            <a href="user_login.php">サイト情報編集</a>
-            <a href="admin/login.php">管理画面</a>
+            <a href="register.php">📝 サイト登録</a>
+            <a href="admin/login.php">⚙️ 管理画面</a>
+        </div>
+        
+        <!-- 個別サイト管理についての案内 -->
+        <div class="info-box" style="margin-top: 30px;">
+            <h4>🛠️ サイト管理について</h4>
+            <p>各サイトの「管理」ボタンから、そのサイト専用の管理画面にアクセスできます。</p>
+            <ul>
+                <li><strong>個別管理</strong>：各サイトごとに独立した管理画面</li>
+                <li><strong>安全性</strong>：そのサイトの登録情報でのみログイン可能</li>
+                <li><strong>即座反映</strong>：更新した情報は承認不要で即座に反映</li>
+                <li><strong>複数カテゴリ</strong>：複数のカテゴリを自由に選択可能</li>
+            </ul>
         </div>
     </div>
 
